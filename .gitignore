@@ -1,20 +1,49 @@
-# Python cache
+# Python
 __pycache__/
 *.py[cod]
+*$py.class
 
-# Virtual environments
+# Virtual Environments
 venv/
 .venv/
+env/
 
-# Environment
+# Environment Variables
 .env
 
-# IDE
+# IDEs
 .vscode/
 .idea/
 
-# GTFS data
-data/gtfs/
+# OS Files
+.DS_Store
+Thumbs.db
 
 # Logs
 *.log
+
+# Python caches
+.pytest_cache/
+.mypy_cache/
+.coverage
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Database files
+*.db
+*.sqlite3
+
+# GTFS datasets
+data/railways/
+data/andhra/
+data/bangalore/
+data/delhi/
+data/kochi/
+data/mumbai/
+
+# Keep data folder
+!data/
+!data/.gitkeep

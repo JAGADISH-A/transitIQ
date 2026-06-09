@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "TransitIQ"
     APP_VERSION: str = "0.1.0"
     APP_ENV: str = "development"
-    GTFS_DATA_PATH: str = "data/gtfs"
+    GTFS_DATA_PATH: str = "data"
 
     model_config = SettingsConfigDict(
         env_file=".env",

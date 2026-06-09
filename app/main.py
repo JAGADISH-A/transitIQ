@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.feeds import router as feeds_router
 from app.api.health import router as health_router
 from app.api.stops import router as stops_router
 from app.config import get_settings
@@ -22,7 +23,11 @@ async def lifespan(app: FastAPI):
     print("TransitIQ Backend Starting...")
 
     try:
-        transit_service.load(settings.GTFS_DATA_PATH)
+        transit_service.load_all_feeds(settings.GTFS_DATA_PATH)
+        feeds = transit_service.available_feeds()
+        print("Loaded feeds:")
+        for feed_name in feeds:
+            print(f"- {feed_name}")
         summary = transit_service.summary
         print(f"✓ Loaded {summary.get('stops', 0)} stops")
         print(f"✓ Loaded {summary.get('routes', 0)} routes")
@@ -49,3 +54,4 @@ app.add_middleware(
 
 app.include_router(health_router)
 app.include_router(stops_router)
+app.include_router(feeds_router)
