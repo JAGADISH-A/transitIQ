@@ -3,6 +3,7 @@
 import logging
 from contextlib import asynccontextmanager
 
+from app.api.routes import router as routes_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -55,3 +56,4 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(stops_router)
 app.include_router(feeds_router)
+app.include_router(routes_router)

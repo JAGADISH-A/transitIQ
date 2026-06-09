@@ -45,3 +45,28 @@ class NearbyStopsResponse(BaseModel):
     feed: str
     count: int
     results: list[NearbyStopResult]
+
+
+class AvailableShapesResponse(BaseModel):
+    """Response model for available GTFS shape identifiers."""
+
+    feed: str
+    count: int
+    shape_ids: list[str]
+
+
+class ShapePoint(BaseModel):
+    """A single point in a GTFS shape polyline."""
+
+    lat: float
+    lon: float
+    sequence: int
+
+
+class RouteShapeResponse(BaseModel):
+    """Response model describing a GTFS route shape by feed."""
+
+    feed: str
+    shape_id: str
+    point_count: int
+    points: list[ShapePoint]

@@ -4,7 +4,7 @@ import logging
 import math
 from typing import Dict, List, Optional
 
-from app.models.schemas import NearbyStopResult, StopResult
+from app.models.schemas import NearbyStopResult, ShapePoint, StopResult
 from app.services.feed_registry import FeedRegistry
 from app.services.gtfs_loader import GTFSLoader
 from app.services.stop_search import StopSearch
@@ -278,6 +278,118 @@ class TransitService:
             raise
         except Exception as exc:  # pragma: no cover - defensive error handling
             message = f"Failed to search stops across all feeds: {exc}"
+            self.logger.exception(message)
+            raise RuntimeError(message) from exc
+
+    def get_route_shape(
+        self,
+        feed_name: str,
+        shape_id: str,
+    ) -> List[ShapePoint]:
+        """Return the ordered shape points for a GTFS route shape.
+
+        Args:
+            feed_name: Name of the GTFS feed that contains the shape.
+            shape_id: Identifier of the requested GTFS shape.
+
+        Returns:
+            A list of ShapePoint objects ordered by GTFS sequence.
+
+        Raises:
+            ValueError: If feed_name or shape_id is empty.
+            RuntimeError: If the feed is not available or the shape cannot be found.
+        """
+        try:
+            if not isinstance(feed_name, str) or not feed_name.strip():
+                raise ValueError("feed_name must be a non-empty string.")
+
+            if not isinstance(shape_id, str) or not shape_id.strip():
+                raise ValueError("shape_id must be a non-empty string.")
+
+            loader = self.get_feed(feed_name)
+            if loader is None:
+                raise RuntimeError(f"GTFS feed '{feed_name}' is not available.")
+
+            if not hasattr(loader, "shapes") or loader.shapes is None:
+                raise RuntimeError(f"No shape data is available for feed '{feed_name}'.")
+
+            shape_rows = loader.shapes[loader.shapes["shape_id"] == shape_id].copy()
+            if shape_rows.empty:
+                raise RuntimeError(f"Shape '{shape_id}' was not found in feed '{feed_name}'.")
+
+            shape_rows["shape_pt_sequence"] = shape_rows["shape_pt_sequence"].astype(int)
+            shape_rows = shape_rows.sort_values(by="shape_pt_sequence")
+
+            points: List[ShapePoint] = []
+            for _, row in shape_rows.iterrows():
+                points.append(
+                    ShapePoint(
+                        lat=float(row.get("shape_pt_lat", 0.0)),
+                        lon=float(row.get("shape_pt_lon", 0.0)),
+                        sequence=int(row.get("shape_pt_sequence", 0)),
+                    )
+                )
+
+            self.logger.info(
+                "Loaded %d shape point(s) for feed '%s' and shape '%s'",
+                len(points),
+                feed_name,
+                shape_id,
+            )
+            return points
+        except ValueError:
+            raise
+        except Exception as exc:  # pragma: no cover - defensive error handling
+            message = f"Failed to retrieve shape '{shape_id}' for feed '{feed_name}': {exc}"
+            self.logger.exception(message)
+            raise RuntimeError(message) from exc
+
+    def get_available_shapes(self, feed_name: str) -> List[str]:
+        """Return all available GTFS shape identifiers for a feed.
+
+        Args:
+            feed_name: Name of the GTFS feed to inspect.
+
+        Returns:
+            A sorted list of unique shape IDs from the feed's shapes data.
+
+        Raises:
+            ValueError: If feed_name is empty or not a string.
+            RuntimeError: If the feed is not available, no shapes data exists,
+                or the shape_id column is missing.
+        """
+        try:
+            if not isinstance(feed_name, str) or not feed_name.strip():
+                raise ValueError("feed_name must be a non-empty string.")
+
+            loader = self.get_feed(feed_name)
+            if loader is None:
+                raise RuntimeError(f"GTFS feed '{feed_name}' is not available.")
+
+            if not hasattr(loader, "shapes") or loader.shapes is None or loader.shapes.empty:
+                raise RuntimeError(f"No shapes data is available for feed '{feed_name}'.")
+
+            if "shape_id" not in loader.shapes.columns:
+                raise RuntimeError(f"Shape data for feed '{feed_name}' is missing the 'shape_id' column.")
+
+            shape_ids = sorted(
+                loader.shapes["shape_id"]
+                .dropna()
+                .astype(str)
+                .unique()
+                .tolist()
+            )
+
+            self.logger.info(
+                "Found %d unique shape ID(s) for feed '%s'",
+                len(shape_ids),
+                feed_name,
+            )
+            return shape_ids
+        except ValueError:
+            raise
+        except Exception as exc:  # pragma: no cover - defensive error handling
+            message = f"Failed to retrieve available shapes for feed '{feed_name}': {exc}"
             self.logger.exception(message)
             raise RuntimeError(message) from exc
 
