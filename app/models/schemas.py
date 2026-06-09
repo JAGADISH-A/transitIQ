@@ -27,3 +27,21 @@ class HealthResponse(BaseModel):
     app_name: str
     version: str
     gtfs_loaded: bool
+
+
+class NearbyStopResult(BaseModel):
+    """A nearby transit stop with its distance from a reference point."""
+
+    stop_id: str
+    stop_name: str
+    lat: float
+    lon: float
+    distance_km: float
+
+
+class NearbyStopsResponse(BaseModel):
+    """Response model for nearby-stop search results."""
+
+    feed: str
+    count: int
+    results: list[NearbyStopResult]

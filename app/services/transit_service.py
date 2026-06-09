@@ -1,12 +1,14 @@
 """Transit service facade for GTFS loading and stop search."""
 
 import logging
+import math
 from typing import Dict, List, Optional
 
-from app.models.schemas import StopResult
+from app.models.schemas import NearbyStopResult, StopResult
 from app.services.feed_registry import FeedRegistry
 from app.services.gtfs_loader import GTFSLoader
 from app.services.stop_search import StopSearch
+from app.utils.geo_utils import haversine
 
 
 class TransitService:
@@ -169,14 +171,125 @@ class TransitService:
             self.logger.exception(message)
             raise RuntimeError(message) from exc
 
-    def search_stops(self, query: str) -> List[StopResult]:
-        """Search stops using the configured GTFS feed.
+    def get_nearby_stops(
+        self,
+        feed_name: str,
+        lat: float,
+        lon: float,
+        radius_km: float = 2.0,
+    ) -> List[NearbyStopResult]:
+        """Return nearby stops for a given feed and coordinate.
+
+        Args:
+            feed_name: Name of the GTFS feed to search within.
+            lat: Reference latitude in decimal degrees.
+            lon: Reference longitude in decimal degrees.
+            radius_km: Maximum search radius in kilometers.
+
+        Returns:
+            A list of nearby stop results sorted by distance.
+
+        Raises:
+            RuntimeError: If the requested feed does not exist.
+        """
+        try:
+            if not isinstance(feed_name, str) or not feed_name.strip():
+                raise ValueError("feed_name must be a non-empty string.")
+
+            loader = self.get_feed(feed_name)
+            if loader is None:
+                raise RuntimeError(f"GTFS feed '{feed_name}' is not available.")
+
+            if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+                raise ValueError("lat and lon must be numeric values.")
+
+            if not isinstance(radius_km, (int, float)) or radius_km < 0:
+                raise ValueError("radius_km must be a non-negative number.")
+
+            results: List[NearbyStopResult] = []
+            for _, row in loader.stops.iterrows():
+                try:
+                    stop_lat = float(row.get("stop_lat", 0.0))
+                    stop_lon = float(row.get("stop_lon", 0.0))
+                except (TypeError, ValueError):
+                    continue
+
+                if not math.isfinite(stop_lat) or not math.isfinite(stop_lon):
+                    continue
+
+                distance_km = haversine(lat, lon, stop_lat, stop_lon)
+                if distance_km <= radius_km:
+                    results.append(
+                        NearbyStopResult(
+                            stop_id=str(row.get("stop_id", "")),
+                            stop_name=str(row.get("stop_name", "")),
+                            lat=stop_lat,
+                            lon=stop_lon,
+                            distance_km=distance_km,
+                        )
+                    )
+
+            results.sort(key=lambda item: item.distance_km)
+            return results[:20]
+        except ValueError: 
+            raise
+        except Exception as exc:  # pragma: no cover - defensive error handling
+            message = f"Failed to find nearby stops for feed '{feed_name}': {exc}"
+            self.logger.exception(message)
+            raise RuntimeError(message) from exc
+
+    def search_stops_all_feeds(self, query: str) -> List[StopResult]:
+        """Search stops across every loaded GTFS feed.
 
         Args:
             query: The text to match against stop identifiers and names.
 
         Returns:
-            A list of stop result models sorted by relevance.
+            A deduplicated list of stop results sorted alphabetically by
+            stop name, limited to a maximum of 20 items.
+
+        Raises:
+            ValueError: If the query is empty or not a non-empty string.
+            RuntimeError: If no GTFS feeds are loaded.
+        """
+        try:
+            if not isinstance(query, str) or not query.strip():
+                raise ValueError("query must be a non-empty string.")
+
+            if not self._feeds:
+                raise RuntimeError("No GTFS feeds are loaded.")
+
+            results: List[StopResult] = []
+            seen: set[tuple[str, str]] = set()
+
+            for loader in self._feeds.values():
+                searcher = StopSearch(loader.stops)
+                for result in searcher.search(query):
+                    dedupe_key = (str(result.stop_id), str(result.stop_name))
+                    if dedupe_key in seen:
+                        continue
+
+                    seen.add(dedupe_key)
+                    results.append(result)
+
+            results.sort(key=lambda item: (item.stop_name or "").lower())
+            return results[:20]
+        except ValueError:
+            raise
+        except Exception as exc:  # pragma: no cover - defensive error handling
+            message = f"Failed to search stops across all feeds: {exc}"
+            self.logger.exception(message)
+            raise RuntimeError(message) from exc
+
+    def search_stops(self, query: str) -> List[StopResult]:
+        """Search stops across all loaded GTFS feeds.
+
+        Args:
+            query: The text to match against stop identifiers and names.
+
+        Returns:
+            A deduplicated list of stop results sorted alphabetically by
+            stop name, limited to a maximum of 20 items.
 
         Raises:
             RuntimeError: If the service has not been loaded yet.
@@ -185,7 +298,7 @@ class TransitService:
             raise RuntimeError("TransitService must be loaded before searching stops.")
 
         try:
-            return self._stop_search.search(query)
+            return self.search_stops_all_feeds(query)
         except Exception as exc:  # pragma: no cover - defensive error handling
             message = f"Stop search failed in TransitService: {exc}"
             self.logger.exception(message)

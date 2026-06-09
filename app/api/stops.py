@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.models.schemas import SearchResponse, StopResult
+from app.models.schemas import NearbyStopsResponse, SearchResponse, StopResult
 from app.services.transit_service import transit_service
 
 router = APIRouter()
@@ -40,3 +40,34 @@ def search_stops_in_feed(
         raise
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/stops/nearby", response_model=NearbyStopsResponse)
+def nearby_stops(
+    feed: str = Query(..., min_length=1, description="GTFS feed name"),
+    lat: float = Query(..., description="Latitude"),
+    lon: float = Query(..., description="Longitude"),
+    radius_km: float = Query(2.0, ge=0.0, description="Search radius in kilometers"),
+) -> NearbyStopsResponse:
+    """Return nearby stops for a selected GTFS feed."""
+    try:
+        if not transit_service.is_loaded:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="GTFS data is not loaded yet.")
+
+        if feed not in transit_service.available_feeds():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Feed '{feed}' does not exist.")
+
+        results = transit_service.get_nearby_stops(
+            feed_name=feed,
+            lat=lat,
+            lon=lon,
+            radius_km=radius_km,
+        )
+        return NearbyStopsResponse(feed=feed, count=len(results), results=results)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
