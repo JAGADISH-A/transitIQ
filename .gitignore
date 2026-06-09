@@ -1,49 +1,116 @@
-# Python
+# ==========================================
+# Python / FastAPI Core Ignored Files
+# ==========================================
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+manifest
+spec
 
+# ==========================================
 # Virtual Environments
+# ==========================================
 venv/
 .venv/
 env/
+ENV/
+env.bak/
+venv.bak/
 
-# Environment Variables
+# ==========================================
+# Environment Variables & Secrets
+# ==========================================
 .env
+.env.*
+!.env.example
 
-# IDEs
-.vscode/
-.idea/
-
-# OS Files
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-
-# Python caches
+# ==========================================
+# Testing & Coverage
+# ==========================================
+.cache/
 .pytest_cache/
 .mypy_cache/
 .coverage
+.coverage.*
+.noserc
+nosetests.xml
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
 
-# Build artifacts
-build/
-dist/
-*.egg-info/
-
-# Database files
+# ==========================================
+# Database files (SQL and local persistence)
+# ==========================================
 *.db
 *.sqlite3
+*.sqlite
 
-# GTFS datasets
-data/railways/
-data/andhra/
-data/bangalore/
-data/delhi/
-data/kochi/
-data/mumbai/
+# ==========================================
+# IDE & System Files
+# ==========================================
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
+ehthumbs.db
 
-# Keep data folder
+# ==========================================
+# Logs
+# ==========================================
+logs/
+*.log
+
+# ==========================================
+# TransitIQ Specific Exclusions (GTFS Data)
+# ==========================================
+# Ignore all raw GTFS datasets (large directories of txt files)
+backend/data/*
+data/*/
+
+
+
+# Keep the data folder itself and the tracking placeholder
 !data/
 !data/.gitkeep
+# Python caches
+*.pyo
+
+# Azure
+.azure/
+
+# OS
+desktop.ini
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Ruff
+.ruff_cache/
+
+# Pyright
+.pyright/

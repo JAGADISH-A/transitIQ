@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from app.api.routes import router as routes_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.api.agent import router as agent_router
 
 from app.api.feeds import router as feeds_router
 from app.api.health import router as health_router
@@ -57,3 +58,4 @@ app.include_router(health_router)
 app.include_router(stops_router)
 app.include_router(feeds_router)
 app.include_router(routes_router)
+app.include_router(agent_router)

@@ -1,0 +1,101 @@
+"""Simple AI-agent tool wrappers for the transit service."""
+
+import logging
+from typing import List
+
+from app.models.schemas import NearbyStopResult, StopResult
+from app.services.transit_service import transit_service
+
+
+class TransitAgentTools:
+    """Expose simple transit-service helper methods for AI agents."""
+
+    def __init__(self) -> None:
+        """Initialize the tool wrapper and logger."""
+        self.logger = logging.getLogger(__name__)
+
+    def get_available_feeds(self) -> List[str]:
+        """Return the currently available GTFS feed names."""
+        try:
+            feeds = transit_service.available_feeds()
+            self.logger.info("Agent requested available feeds: %d feed(s)", len(feeds))
+            return feeds
+        except Exception as exc:  # pragma: no cover - defensive error handling
+            message = f"Failed to retrieve available feeds: {exc}"
+            self.logger.exception(message)
+            raise RuntimeError(message) from exc
+
+    def search_stops(self, query: str) -> List[StopResult]:
+        """Search stops across the currently loaded GTFS data."""
+        try:
+            if not isinstance(query, str) or not query.strip():
+                raise ValueError("query must be a non-empty string.")
+
+            results = transit_service.search_stops(query)
+            self.logger.info("Agent searched stops for query '%s': %d result(s)", query, len(results))
+            return results
+        except ValueError:
+            raise
+        except Exception as exc:  # pragma: no cover - defensive error handling
+            message = f"Failed to search stops: {exc}"
+            self.logger.exception(message)
+            raise RuntimeError(message) from exc
+
+    def search_stops_in_feed(self, query: str, feed: str) -> List[StopResult]:
+        """Search stops within a specific GTFS feed."""
+        try:
+            if not isinstance(query, str) or not query.strip():
+                raise ValueError("query must be a non-empty string.")
+            if not isinstance(feed, str) or not feed.strip():
+                raise ValueError("feed must be a non-empty string.")
+
+            results = transit_service.search_stops_in_feed(query, feed)
+            self.logger.info(
+                "Agent searched feed '%s' for query '%s': %d result(s)",
+                feed,
+                query,
+                len(results),
+            )
+            return results
+        except ValueError:
+            raise
+        except Exception as exc:  # pragma: no cover - defensive error handling
+            message = f"Failed to search stops in feed '{feed}': {exc}"
+            self.logger.exception(message)
+            raise RuntimeError(message) from exc
+
+    def nearby_stops(
+        self,
+        feed: str,
+        lat: float,
+        lon: float,
+        radius_km: float = 2.0,
+    ) -> List[NearbyStopResult]:
+        """Return nearby stops for a specific GTFS feed and coordinate."""
+        try:
+            if not isinstance(feed, str) or not feed.strip():
+                raise ValueError("feed must be a non-empty string.")
+            if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+                raise ValueError("lat and lon must be numeric values.")
+            if not isinstance(radius_km, (int, float)) or radius_km < 0:
+                raise ValueError("radius_km must be a non-negative number.")
+
+            results = transit_service.get_nearby_stops(feed_name=feed, lat=lat, lon=lon, radius_km=radius_km)
+            self.logger.info(
+                "Agent requested nearby stops for feed '%s' at (%.4f, %.4f) within %.2f km: %d result(s)",
+                feed,
+                lat,
+                lon,
+                radius_km,
+                len(results),
+            )
+            return results
+        except ValueError:
+            raise
+        except Exception as exc:  # pragma: no cover - defensive error handling
+            message = f"Failed to find nearby stops for feed '{feed}': {exc}"
+            self.logger.exception(message)
+            raise RuntimeError(message) from exc
+
+
+agent_tools = TransitAgentTools()
