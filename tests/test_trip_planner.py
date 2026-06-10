@@ -183,5 +183,113 @@ def test_find_trip_result_limit(transit_svc):
     # Ensure limit works (set to 2)
     resp = transit_svc.find_trip("Source Stop", "Dest Stop", max_transfer_results=2)
     res = resp.results[0]
-    
     assert len(res.transfer_options) == 2
+
+
+def test_stop_search_ranking():
+    from app.services.stop_search import StopSearch
+    from app.models.schemas import MatchTier
+    import pandas as pd
+    
+    stops_df = pd.DataFrame([
+        {"stop_id": "MS", "stop_name": "Chennai Egmore", "stop_lat": "13.0", "stop_lon": "80.0"},
+        {"stop_id": "MASS", "stop_name": "Chennai Central Suburban", "stop_lat": "13.1", "stop_lon": "80.1"},
+        {"stop_id": "123", "stop_name": "MS Terminal", "stop_lat": "13.2", "stop_lon": "80.2"},
+        {"stop_id": "456", "stop_name": "Some MS Stop", "stop_lat": "13.3", "stop_lon": "80.3"},
+        {"stop_id": "CMS", "stop_name": "Kochi Bus Stop", "stop_lat": "10.0", "stop_lon": "76.0"},
+        {"stop_id": "789", "stop_name": "High Mass Light", "stop_lat": "10.1", "stop_lon": "76.1"},
+    ])
+    searcher = StopSearch(stops_df)
+
+    # 1. Exact stop_id matching
+    res_ms = searcher.search("MS")
+    assert res_ms[0].stop_id == "MS"
+    assert res_ms[0].match_tier == MatchTier.EXACT_ID
+    
+    # 2. Exact stop_name matching
+    res_name = searcher.search("Chennai Egmore")
+    assert res_name[0].stop_id == "MS"
+    assert res_name[0].match_tier == MatchTier.EXACT_NAME
+    
+    # 3. Prefix matching
+    res_prefix = searcher.search("MS Term")
+    assert res_prefix[0].stop_id == "123"
+    assert res_prefix[0].match_tier == MatchTier.PREFIX
+    
+    # 4. Token matching
+    assert res_ms[1].stop_id == "123" # Prefix "MS Terminal"
+    assert res_ms[1].match_tier == MatchTier.PREFIX
+    assert res_ms[2].stop_id == "456" # Token "Some MS Stop"
+    assert res_ms[2].match_tier == MatchTier.TOKEN
+    assert res_ms[3].stop_id == "CMS" # Fuzzy substring "CMS"
+    assert res_ms[3].match_tier == MatchTier.FUZZY
+    
+    # 5. Fuzzy matching
+    res_mass = searcher.search("MASS")
+    assert res_mass[0].stop_id == "MASS" # Exact ID
+    assert res_mass[0].match_tier == MatchTier.EXACT_ID
+    assert res_mass[1].stop_id == "789" # Token match "High Mass Light"
+    assert res_mass[1].match_tier == MatchTier.TOKEN
+
+
+def test_cross_feed_ambiguity(transit_svc):
+    import pandas as pd
+    
+    # Set up Chennai feed
+    chennai_stops = pd.DataFrame([
+        {"stop_id": "MS", "stop_name": "Chennai Egmore", "stop_lat": "13.0", "stop_lon": "80.0"},
+        {"stop_id": "MASS", "stop_name": "Chennai Central Suburban", "stop_lat": "13.1", "stop_lon": "80.1"},
+    ])
+    chennai_routes = pd.DataFrame([{"route_id": "R1", "route_short_name": "C1", "route_long_name": "Chennai Route"}])
+    chennai_trips = pd.DataFrame([{"route_id": "R1", "trip_id": "T1"}])
+    chennai_st = pd.DataFrame([
+        {"trip_id": "T1", "stop_id": "MS", "stop_sequence": "1"},
+        {"trip_id": "T1", "stop_id": "MASS", "stop_sequence": "2"},
+    ])
+    
+    class MockChennai:
+        def __init__(self):
+            self.stops = chennai_stops
+            self.routes = chennai_routes
+            self.trips = chennai_trips
+            self.stop_times = chennai_st
+        def get_stop_by_id(self, stop_id):
+            matches = self.stops[self.stops["stop_id"] == stop_id]
+            return matches.iloc[0] if not matches.empty else None
+            
+    # Set up Kochi feed
+    kochi_stops = pd.DataFrame([
+        {"stop_id": "CMS", "stop_name": "Kochi Bus Stop", "stop_lat": "10.0", "stop_lon": "76.0"},
+        {"stop_id": "789", "stop_name": "High Mass Light", "stop_lat": "10.1", "stop_lon": "76.1"},
+    ])
+    kochi_routes = pd.DataFrame([{"route_id": "K1", "route_short_name": "K1", "route_long_name": "Kochi Route"}])
+    kochi_trips = pd.DataFrame([{"route_id": "K1", "trip_id": "KT1"}])
+    kochi_st = pd.DataFrame([
+        {"trip_id": "KT1", "stop_id": "CMS", "stop_sequence": "1"},
+        {"trip_id": "KT1", "stop_id": "789", "stop_sequence": "2"},
+    ])
+
+    class MockKochi:
+        def __init__(self):
+            self.stops = kochi_stops
+            self.routes = kochi_routes
+            self.trips = kochi_trips
+            self.stop_times = kochi_st
+        def get_stop_by_id(self, stop_id):
+            matches = self.stops[self.stops["stop_id"] == stop_id]
+            return matches.iloc[0] if not matches.empty else None
+            
+    transit_svc._feeds = {"kochi": MockKochi(), "chennai": MockChennai()}
+    transit_svc._gtfs_loader = True
+    transit_svc._stop_search = True
+    
+    # 6. Cross-feed collisions 
+    resp = transit_svc.find_trip("MS", "MASS")
+    
+    # Expected: "chennai" feed should be the first result
+    assert resp.results[0].feed == "chennai"
+    # Kochi feed shouldn't outrank Chennai since Kochi uses fuzzy matches while Chennai uses Exact IDs
+    
+    assert resp.results[0].source_stop_id == "MS"
+    assert resp.results[0].destination_stop_id == "MASS"
+

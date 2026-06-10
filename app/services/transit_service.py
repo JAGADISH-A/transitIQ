@@ -273,7 +273,7 @@ class TransitService:
                     seen.add(dedupe_key)
                     results.append(result)
 
-            results.sort(key=lambda item: (item.stop_name or "").lower())
+            results.sort(key=lambda item: (item.match_tier, -item.match_score, (item.stop_name or "").lower()))
             return results[:20]
         except ValueError:
             raise
@@ -445,6 +445,8 @@ class TransitService:
         results: List[TripResult] = []
         feeds_searched: List[str] = list(self._feeds.keys())
 
+        # Stage 1: Evaluate stop matching across all feeds
+        feed_candidates = []
         for feed_name, loader in self._feeds.items():
             searcher = StopSearch(loader.stops)
             source_matches = searcher.search(source)
@@ -453,9 +455,38 @@ class TransitService:
             if not source_matches or not dest_matches:
                 continue
 
-            # Take the best match for source and destination in this feed
             source_stop = source_matches[0]
             dest_stop = dest_matches[0]
+            tier_sum = source_stop.match_tier + dest_stop.match_tier
+            score_sum = source_stop.match_score + dest_stop.match_score
+            
+            # [DIAGNOSTICS] Log feed candidates before processing trips
+            self.logger.info(
+                f"[DIAGNOSTICS] Feed '{feed_name}' match -> "
+                f"Source: {source_stop.stop_name} (Tier {source_stop.match_tier}) | "
+                f"Dest: {dest_stop.stop_name} (Tier {dest_stop.match_tier}) | "
+                f"Tier Sum: {tier_sum}"
+            )
+            
+            feed_candidates.append((tier_sum, -score_sum, feed_name, loader, source_stop, dest_stop))
+
+        if not feed_candidates:
+            return TripResponse(
+                source=source,
+                destination=destination,
+                results=[],
+                feeds_searched=feeds_searched,
+            )
+
+        # Sort feeds by best match tiers
+        feed_candidates.sort(key=lambda x: (x[0], x[1]))
+        best_tier_sum = feed_candidates[0][0]
+
+        # Stage 2: Only search for trips in the feeds with the best matching stops
+        for tier_sum, neg_score_sum, feed_name, loader, source_stop, dest_stop in feed_candidates:
+            if tier_sum > best_tier_sum:
+                self.logger.info(f"Skipping feed '{feed_name}' (Tier Sum {tier_sum} > Best {best_tier_sum})")
+                continue
 
             stop_times = loader.stop_times
             trips = loader.trips
@@ -477,9 +508,25 @@ class TransitService:
             source_route_ids = set(source_routes["route_id"])
             dest_route_ids = set(dest_routes["route_id"])
 
+            self.logger.info(
+                f"[DIAGNOSTICS] Routing in feed '{feed_name}' - "
+                f"source_stop_id: {source_stop.stop_id}, "
+                f"dest_stop_id: {dest_stop.stop_id}, "
+                f"routes serving source: {len(source_route_ids)}, "
+                f"routes serving destination: {len(dest_route_ids)}"
+            )
+
             # 1. Find direct routes
             direct_route_ids = source_route_ids.intersection(dest_route_ids)
             direct_trip_routes: List[TripRoute] = []
+            
+            common_trip_ids = set(source_tr["trip_id"]).intersection(set(dest_tr["trip_id"]))
+            self.logger.info(
+                f"[DIAGNOSTICS] Feed '{feed_name}' - "
+                f"common routes: {len(direct_route_ids)}, "
+                f"common trips: {len(common_trip_ids)}"
+            )
+
             
             for r_id in direct_route_ids:
                 r_row = routes[routes["route_id"] == r_id].iloc[0]
@@ -508,6 +555,11 @@ class TransitService:
             )
 
             transfer_stop_ids = list(source_stops_all.intersection(dest_stops_all))
+            
+            self.logger.info(
+                f"[DIAGNOSTICS] Feed '{feed_name}' - "
+                f"transfer candidates (common stops): {len(transfer_stop_ids)}"
+            )
 
             for t_stop_id in transfer_stop_ids:
                 t_stop_row = loader.get_stop_by_id(t_stop_id)
@@ -520,47 +572,72 @@ class TransitService:
                 # Find a route from source to transfer
                 t_stop_st = stop_times[stop_times["stop_id"] == t_stop_id]
                 t_source_tr = source_trips_all[source_trips_all["trip_id"].isin(t_stop_st["trip_id"])]
-                if t_source_tr.empty:
-                    continue
-                    
-                t_source_trip_id = t_source_tr["trip_id"].iloc[0]
-                t_source_r_id = t_source_tr["route_id"].iloc[0]
+                
+                valid_source_trip_id = None
+                valid_source_r_id = None
+                source_seq = 0
+                t_source_seq = 0
+                
+                if not t_source_tr.empty:
+                    for _, t_row in t_source_tr.iterrows():
+                        trip_id = t_row["trip_id"]
+                        t_st_all = stop_times[stop_times["trip_id"] == trip_id]
+                        try:
+                            s_seq_val = t_st_all[t_st_all["stop_id"] == source_stop.stop_id]["stop_sequence"].iloc[0]
+                            ts_seq_val = t_st_all[t_st_all["stop_id"] == t_stop_id]["stop_sequence"].iloc[0]
+                            s_seq = int(s_seq_val) if not pd.isna(s_seq_val) else 0
+                            ts_seq = int(ts_seq_val) if not pd.isna(ts_seq_val) else 0
+                            
+                            if s_seq < ts_seq:
+                                valid_source_trip_id = trip_id
+                                valid_source_r_id = t_row["route_id"]
+                                source_seq = s_seq
+                                t_source_seq = ts_seq
+                                break
+                        except (IndexError, ValueError):
+                            continue
 
                 # Find a route from transfer to dest
                 t_dest_tr = dest_trips_all[dest_trips_all["trip_id"].isin(t_stop_st["trip_id"])]
-                if t_dest_tr.empty:
-                    continue
-                    
-                t_dest_trip_id = t_dest_tr["trip_id"].iloc[0]
-                t_dest_r_id = t_dest_tr["route_id"].iloc[0]
-
-                if t_source_r_id and t_dest_r_id:
-                    r_source_row = routes[routes["route_id"] == t_source_r_id].iloc[0]
-                    r_dest_row = routes[routes["route_id"] == t_dest_r_id].iloc[0]
-                    
-                    # Stop sequence calculation
-                    t_source_st_all = stop_times[stop_times["trip_id"] == t_source_trip_id]
-                    t_dest_st_all = stop_times[stop_times["trip_id"] == t_dest_trip_id]
-                    
-                    try:
-                        source_seq_val = t_source_st_all[t_source_st_all["stop_id"] == source_stop.stop_id]["stop_sequence"].iloc[0]
-                        t_source_seq_val = t_source_st_all[t_source_st_all["stop_id"] == t_stop_id]["stop_sequence"].iloc[0]
-                        t_dest_seq_val = t_dest_st_all[t_dest_st_all["stop_id"] == t_stop_id]["stop_sequence"].iloc[0]
-                        dest_seq_val = t_dest_st_all[t_dest_st_all["stop_id"] == dest_stop.stop_id]["stop_sequence"].iloc[0]
-                        
-                        source_seq = int(source_seq_val) if not pd.isna(source_seq_val) else 0
-                        t_source_seq = int(t_source_seq_val) if not pd.isna(t_source_seq_val) else 0
-                        t_dest_seq = int(t_dest_seq_val) if not pd.isna(t_dest_seq_val) else 0
-                        dest_seq = int(dest_seq_val) if not pd.isna(dest_seq_val) else 0
-                        
-                        # Validate direction: transfer must happen after source, dest after transfer
-                        if t_source_seq <= source_seq or dest_seq <= t_dest_seq:
-                            continue # Invalid transfer sequence direction
+                
+                valid_dest_trip_id = None
+                valid_dest_r_id = None
+                t_dest_seq = 0
+                dest_seq = 0
+                
+                if not t_dest_tr.empty:
+                    for _, t_row in t_dest_tr.iterrows():
+                        trip_id = t_row["trip_id"]
+                        t_st_all = stop_times[stop_times["trip_id"] == trip_id]
+                        try:
+                            td_seq_val = t_st_all[t_st_all["stop_id"] == t_stop_id]["stop_sequence"].iloc[0]
+                            d_seq_val = t_st_all[t_st_all["stop_id"] == dest_stop.stop_id]["stop_sequence"].iloc[0]
+                            td_seq = int(td_seq_val) if not pd.isna(td_seq_val) else 0
+                            d_seq = int(d_seq_val) if not pd.isna(d_seq_val) else 0
                             
-                        estimated_stop_count = (t_source_seq - source_seq) + (dest_seq - t_dest_seq)
-                    except (IndexError, ValueError):
-                        # Fallback if stop_sequence is missing or malformed
-                        estimated_stop_count = 10
+                            if td_seq < d_seq:
+                                valid_dest_trip_id = trip_id
+                                valid_dest_r_id = t_row["route_id"]
+                                t_dest_seq = td_seq
+                                dest_seq = d_seq
+                                break
+                        except (IndexError, ValueError):
+                            continue
+
+                self.logger.info(
+                    f"[TRANSFER]\n"
+                    f"candidate_stop={t_stop_id}\n"
+                    f"source_trip_count={len(t_source_tr)}\n"
+                    f"dest_trip_count={len(t_dest_tr)}\n"
+                    f"valid_source_trip_found={valid_source_trip_id is not None}\n"
+                    f"valid_dest_trip_found={valid_dest_trip_id is not None}"
+                )
+
+                if valid_source_trip_id and valid_dest_trip_id:
+                    r_source_row = routes[routes["route_id"] == valid_source_r_id].iloc[0]
+                    r_dest_row = routes[routes["route_id"] == valid_dest_r_id].iloc[0]
+                    
+                    estimated_stop_count = (t_source_seq - source_seq) + (dest_seq - t_dest_seq)
                         
                     # Distance penalty calculation
                     source_lat = float(source_stop.lat) if source_stop.lat else 0.0
@@ -616,8 +693,20 @@ class TransitService:
                         feed=feed_name,
                         direct_routes=direct_trip_routes,
                         transfer_options=transfer_options,
+                        source_match_tier=source_stop.match_tier,
+                        dest_match_tier=dest_stop.match_tier,
+                        source_match_score=source_stop.match_score,
+                        dest_match_score=dest_stop.match_score,
                     )
                 )
+
+
+        # 4. Sort results by feed consistency and match quality
+        # Lower tier sum is better. Then higher score sum is better (less penalty).
+        results.sort(key=lambda r: (
+            r.source_match_tier + r.dest_match_tier,
+            -(r.source_match_score + r.dest_match_score)
+        ))
 
         return TripResponse(
             source=source,

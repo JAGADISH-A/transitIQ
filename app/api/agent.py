@@ -61,6 +61,11 @@ def ask_foundry(query: Dict[str, Any] = Body(..., description="Foundry request p
             )
 
         user_query = query.get("query") if isinstance(query, dict) else None
+        
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning("API query = %s", user_query)
+        
         if not isinstance(user_query, str) or not user_query.strip():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="query must be a non-empty string.")
 
@@ -68,7 +73,10 @@ def ask_foundry(query: Dict[str, Any] = Body(..., description="Foundry request p
         return {
             "answer": result.get("answer", "I could not generate a response."),
             "provider": result.get("provider", "foundry"),
+            "classification": result.get("classification", "UNKNOWN"),
+            "execution_time_ms": result.get("execution_time_ms", 0),
             "tools_used": result.get("tools_used", []),
+            "route_data": result.get("route_data")
         }
     except HTTPException:
         raise

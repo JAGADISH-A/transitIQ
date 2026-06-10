@@ -32,6 +32,14 @@ class TransitAgentTools:
                 raise ValueError("query must be a non-empty string.")
 
             results = transit_service.search_stops(query)
+            
+            # Diagnostic logging for top candidates
+            for i, res in enumerate(results[:3]):
+                self.logger.info(
+                    "[DIAGNOSTICS] Search stop '%s' candidate %d: id='%s' name='%s' tier=%d score=%.1f",
+                    query, i+1, res.stop_id, res.stop_name, res.match_tier, res.match_score
+                )
+            
             self.logger.info("Agent searched stops for query '%s': %d result(s)", query, len(results))
             return results
         except ValueError:
@@ -50,6 +58,14 @@ class TransitAgentTools:
                 raise ValueError("feed must be a non-empty string.")
 
             results = transit_service.search_stops_in_feed(query, feed)
+            
+            # Diagnostic logging for top candidates
+            for i, res in enumerate(results[:3]):
+                self.logger.info(
+                    "[DIAGNOSTICS] Feed '%s' search '%s' candidate %d: id='%s' name='%s' tier=%d score=%.1f",
+                    feed, query, i+1, res.stop_id, res.stop_name, res.match_tier, res.match_score
+                )
+                
             self.logger.info(
                 "Agent searched feed '%s' for query '%s': %d result(s)",
                 feed,
@@ -115,6 +131,20 @@ class TransitAgentTools:
                 raise ValueError("destination must be a non-empty string.")
 
             result = transit_service.find_trip(source=source, destination=destination)
+            
+            if result.results:
+                best_match = result.results[0]
+                self.logger.info(
+                    "[DIAGNOSTICS] Trip selected feed='%s', source='%s' (tier %d), dest='%s' (tier %d)",
+                    best_match.feed, best_match.source_stop_name, best_match.source_match_tier,
+                    best_match.destination_stop_name, best_match.dest_match_tier
+                )
+                for i, alt in enumerate(result.results[1:3]):
+                    self.logger.info(
+                        "[DIAGNOSTICS] Trip alternate %d feed='%s', source='%s' (tier %d), dest='%s' (tier %d)",
+                        i+1, alt.feed, alt.source_stop_name, alt.source_match_tier, alt.destination_stop_name, alt.dest_match_tier
+                    )
+            
             self.logger.info(
                 "Agent requested trip from '%s' to '%s': %d feed(s) searched, %d result(s)",
                 source,

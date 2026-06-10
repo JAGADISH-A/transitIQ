@@ -14,6 +14,7 @@ re-routes the call through the normal execute_tool_call path.
 import json
 import logging
 import re
+import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -150,6 +151,104 @@ class FoundryTransitAgent:
             except Exception as exc:  # pragma: no cover - runtime integration path
                 self.logger.warning("Foundry client initialization failed: %s", exc)
                 self._openai_client = None
+
+    def _fast_path_route(self, user_query: str) -> Optional[Dict[str, Any]]:
+        """Intent Router to bypass reasoning for simple transit lookups."""
+        patterns_trip = [
+            re.compile(r"(?:route|trip|directions)\s+from\s+(.+?)\s+to\s+(.+?)(?:\Z|\?|\.)", re.IGNORECASE),
+            re.compile(r"how\s+(?:do|can)\s+i\s+get\s+from\s+(.+?)\s+to\s+(.+?)(?:\Z|\?|\.)", re.IGNORECASE)
+        ]
+        patterns_station = [
+            re.compile(r"(?:search\s+stop|find\s+station)\s+(.+?)(?:\Z|\?|\.)", re.IGNORECASE)
+        ]
+
+        # Check trip routing
+        for p in patterns_trip:
+            match = p.search(user_query)
+            if match:
+                self.logger.info("[ROUTER] Matched route query")
+                source = match.group(1).strip()
+                dest = match.group(2).strip()
+                
+                route_data = None
+                try:
+                    res_dict = agent_tools.find_trip(source, dest)
+                    results = res_dict.get("results", [])
+                    
+                    route_data = {
+                        "source": source,
+                        "destination": dest,
+                        "results": results
+                    }
+                    
+                    if results:
+                        trip = results[0]
+                        s_name = trip.get("source_stop_name", "Source")
+                        d_name = trip.get("destination_stop_name", "Destination")
+                        
+                        transfer_opts = trip.get("transfer_options", [])
+                        direct_opts = trip.get("direct_routes", [])
+                        
+                        if direct_opts:
+                            answer = f"Found a direct route from {s_name} to {d_name}."
+                        elif transfer_opts:
+                            answer = f"Found {len(transfer_opts)} transfer options from {s_name} to {d_name}."
+                        else:
+                            answer = f"Found a route from {s_name} to {d_name}."
+                    else:
+                        answer = "I searched available feeds but could not find a route between the requested stops."
+                except Exception as e:
+                    self.logger.exception("[ROUTER] find_trip exception")
+                    answer = "I searched available feeds but could not find a route between the requested stops."
+                
+                return {
+                    "answer": answer,
+                    "tools_used": ["find_trip"],
+                    "route_data": route_data
+                }
+                
+        # Check station lookup
+        for p in patterns_station:
+            match = p.search(user_query)
+            if match:
+                self.logger.info("[ROUTER] Matched station search query")
+                query = match.group(1).strip()
+                
+                try:
+                    self.logger.warning("RAW USER QUERY: %r", user_query)
+                    self.logger.warning("EXTRACTED QUERY: %r", query)
+                    
+                    res_list = agent_tools.search_stops(query)
+                    
+                    self.logger.warning("RESULT COUNT: %s", len(res_list) if res_list else 0)
+                    self.logger.warning("RESULTS: %s", res_list[:3] if res_list else [])
+                    
+                    self.logger.warning("FAST_PATH query = %s", query)
+                    self.logger.warning("FAST_PATH results count = %s", len(res_list) if isinstance(res_list, list) else 'NOT_A_LIST')
+                    self.logger.warning("FAST_PATH first result = %s", res_list[0] if isinstance(res_list, list) and len(res_list) > 0 else None)
+                    
+                    if isinstance(res_list, list) and len(res_list) > 0:
+                        stop = res_list[0]
+                        s_name = getattr(stop, "stop_name", "Unknown Stop")
+                        s_id = getattr(stop, "stop_id", "Unknown ID")
+                        
+                        self.logger.info(f"[STATION_SEARCH] top_result={s_name} ({s_id})")
+                        self.logger.info(f"[STATION_SEARCH] tier={getattr(stop, 'match_tier', 'Unknown')}")
+                        self.logger.info(f"[STATION_SEARCH] score={getattr(stop, 'match_score', 'Unknown')}")
+                        
+                        answer = f"Found stop:\n{s_name} ({s_id})"
+                    else:
+                        answer = "Could not find a matching stop."
+                except Exception as e:
+                    self.logger.exception("[ROUTER] search_stops exception: %s", e)
+                    answer = "Could not find a matching stop."
+                    
+                return {
+                    "answer": answer,
+                    "tools_used": ["search_stops"]
+                }
+                
+        return None
 
     # ------------------------------------------------------------------
     # Tool definitions
@@ -519,6 +618,21 @@ class FoundryTransitAgent:
         If the Foundry project endpoint is not configured, the method falls back to
         the existing planner logic so the API remains usable in local development.
         """
+        start_time = time.perf_counter()
+
+        fast_result = self._fast_path_route(user_query)
+        if fast_result is not None:
+            self.logger.info("[ROUTER] Query classified as FAST_PATH")
+            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            return {
+                **fast_result,
+                "classification": "FAST_PATH",
+                "provider": "fast_path",
+                "execution_time_ms": elapsed_ms,
+            }
+
+        self.logger.info("[ROUTER] Query classified as REASONING_PATH")
+
         if not isinstance(user_query, str) or not user_query.strip():
             return {"answer": "I can help with transit questions. Please provide a destination or location query.", "provider": "local"}
 
@@ -550,6 +664,7 @@ class FoundryTransitAgent:
         ]
 
         tool_calls_used: List[str] = []
+        successful_tool_results: List[tuple] = []
         final_answer = "I could not generate a response from the Foundry model."
 
         print(f"\n{'='*60}")
@@ -599,6 +714,11 @@ class FoundryTransitAgent:
             print(f"[FOUNDRY-DIAG] assistant_message appended = {assistant_message}")
             messages.append(assistant_message)
 
+            self.logger.info(f"COMPLETION FINISH_REASON: {finish_reason}")
+            self.logger.info(f"COMPLETION CONTENT: {getattr(message, 'content', None)}")
+            self.logger.info(f"COMPLETION TOOL_CALLS: {getattr(message, 'tool_calls', None)}")
+            self.logger.info(f"COMPLETION REASONING: {reasoning_content}")
+
             tool_calls = getattr(message, "tool_calls", None) or []
             print(f"[FOUNDRY-DIAG] TOOL CALLS (iter {iteration}) = {tool_calls}")
             print(f"[FOUNDRY-DIAG] tool_calls count = {len(tool_calls)}")
@@ -625,6 +745,26 @@ class FoundryTransitAgent:
                         print(f"[RECOVERY] Tool inferred: {recovered_tool}")
                         print(f"[RECOVERY] Arguments: {recovered_args}")
 
+                        REQUIRED_ARGS = {
+                            "find_trip": ["source", "destination"],
+                            "search_stops": ["query"],
+                            "search_stops_in_feed": ["query", "feed"],
+                            "nearby_stops": ["feed", "lat", "lon"]
+                        }
+
+                        missing = [
+                            arg for arg in REQUIRED_ARGS.get(recovered_tool, [])
+                            if arg not in recovered_args
+                        ]
+
+                        if missing:
+                            self.logger.warning(
+                                "[RECOVERY] Rejecting inferred tool '%s'. Missing args: %s",
+                                recovered_tool,
+                                missing,
+                            )
+                            continue
+
                         # Synthesize an OpenAI-compatible tool_call dict
                         synthetic_id = f"recovered_{uuid.uuid4().hex[:12]}"
                         synthetic_tool_call = {
@@ -650,6 +790,14 @@ class FoundryTransitAgent:
                         tool_result = self.execute_tool_call(synthetic_tool_call)
                         print(f"[RECOVERY] Tool completed: {tool_result}")
                         messages.append(tool_result)
+
+                        try:
+                            content_dict = json.loads(tool_result["content"])
+                            if isinstance(content_dict, (dict, list)) and ("error" not in content_dict if isinstance(content_dict, dict) else True):
+                                successful_tool_results.append((recovered_tool, content_dict))
+                        except Exception:
+                            pass
+
                         print(f"[RECOVERY] Continuing conversation loop")
 
                         # Continue — next iteration sends tool result to model.
@@ -665,7 +813,14 @@ class FoundryTransitAgent:
                 print(f"[FOUNDRY-DIAG] No tool calls — extracting final answer")
                 print(f"[FOUNDRY-DIAG] raw message.content = {raw_content!r}")
                 print(f"[FOUNDRY-DIAG] bool(raw_content)   = {bool(raw_content)}")
-                final_answer = raw_content or final_answer
+                
+                # FIX: If raw_content is falsy, but reasoning_content has text (and we didn't recover a tool),
+                # use reasoning_content as the final answer instead of falling back to default error.
+                if not raw_content and reasoning_content:
+                    final_answer = reasoning_content
+                else:
+                    final_answer = raw_content or final_answer
+                
                 print(f"[FOUNDRY-DIAG] final_answer after assignment = {final_answer!r}")
                 if final_answer == "I could not generate a response from the Foundry model.":
                     print(f"[FOUNDRY-DIAG] *** BUG HIT: content was falsy, fell back to default error string ***")
@@ -684,9 +839,47 @@ class FoundryTransitAgent:
                 tool_result = self.execute_tool_call(tool_call.model_dump() if hasattr(tool_call, "model_dump") else tool_call)
                 print(f"[FOUNDRY-DIAG] TOOL RESULT ({tool_name}) = {tool_result}")
                 messages.append(tool_result)
+
+                try:
+                    content_dict = json.loads(tool_result["content"])
+                    if isinstance(content_dict, (dict, list)) and ("error" not in content_dict if isinstance(content_dict, dict) else True):
+                        successful_tool_results.append((tool_name, content_dict))
+                except Exception:
+                    pass
         else:
             print(f"[FOUNDRY-DIAG] *** Exhausted max iterations (5) ***")
             self.logger.warning("Reached maximum tool-calling iterations for query '%s'", user_query)
+
+        if final_answer == "I could not generate a response from the Foundry model." and successful_tool_results:
+            print("[FALLBACK] Building response from tool results")
+            self.logger.info("[FALLBACK] Building response from tool results")
+            
+            fallback_parts = []
+            for t_name, t_data in successful_tool_results:
+                if t_name in ("search_stops", "search_stops_in_feed", "nearby_stops"):
+                    if isinstance(t_data, list) and len(t_data) > 0:
+                        stop = t_data[0]
+                        stop_name = stop.get("stop_name", "Unknown Stop")
+                        stop_id = stop.get("stop_id", "Unknown ID")
+                        fallback_parts.append(f"I found the following stop:\n\n{stop_name} ({stop_id})")
+                elif t_name == "find_trip":
+                    results = t_data.get("results", [])
+                    if not results:
+                        fallback_parts.append("I searched available feeds but could not find a route between the requested stops.")
+                    else:
+                        trip = results[0]
+                        source = trip.get("source_stop_name", "Source")
+                        dest = trip.get("destination_stop_name", "Destination")
+                        feed = trip.get("feed", "unknown feed")
+                        fallback_parts.append(f"I found a route from {source} to {dest} in the {feed} feed.")
+                elif t_name == "get_available_feeds":
+                    if isinstance(t_data, list):
+                        fallback_parts.append(f"The available feeds are: {', '.join(str(f) for f in t_data)}")
+            
+            if fallback_parts:
+                final_answer = "\n\n".join(fallback_parts)
+                print("[FALLBACK] Generated fallback answer")
+                self.logger.info("[FALLBACK] Generated fallback answer")
 
         print(f"\n[FOUNDRY-DIAG] === RETURNING ===")
         print(f"[FOUNDRY-DIAG] final_answer   = {final_answer!r}")
@@ -694,10 +887,18 @@ class FoundryTransitAgent:
         print(f"[FOUNDRY-DIAG] is_default_err = {final_answer == 'I could not generate a response from the Foundry model.'}")
         print(f"{'='*60}\n")
 
+        self.logger.info(f"RETURN ITERATION: {iteration}")
+        self.logger.info(f"RETURN FINAL_ANSWER: {final_answer}")
+        self.logger.info(f"RETURN TOOLS_USED: {tool_calls_used}")
+        self.logger.info(f"RETURN PROVIDER: foundry")
+
+        elapsed_ms = int((time.perf_counter() - start_time) * 1000)
         return {
             "answer": final_answer,
             "provider": "foundry",
             "tools_used": tool_calls_used,
+            "classification": "REASONING_PATH",
+            "execution_time_ms": elapsed_ms,
         }
 
 

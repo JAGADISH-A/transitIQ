@@ -1,6 +1,17 @@
 """Pydantic response schemas for the TransitIQ API."""
 
+from enum import IntEnum
 from pydantic import BaseModel
+
+
+class MatchTier(IntEnum):
+    """Deterministic ranking tiers for stop matching. Lower number is better priority."""
+    EXACT_ID = 1
+    EXACT_NAME = 2
+    NORMALIZED_EXACT_NAME = 3
+    PREFIX = 4
+    TOKEN = 5
+    FUZZY = 6
 
 
 class StopResult(BaseModel):
@@ -10,6 +21,8 @@ class StopResult(BaseModel):
     stop_name: str
     lat: float
     lon: float
+    match_tier: int = MatchTier.FUZZY
+    match_score: float = 0.0  # Tie-breaker for same tier
 
 
 class SearchResponse(BaseModel):
@@ -103,6 +116,10 @@ class TripResult(BaseModel):
     feed: str
     direct_routes: list[TripRoute]
     transfer_options: list[TransferOption]
+    source_match_tier: int = 6
+    dest_match_tier: int = 6
+    source_match_score: float = 0.0
+    dest_match_score: float = 0.0
 
 
 class TripResponse(BaseModel):

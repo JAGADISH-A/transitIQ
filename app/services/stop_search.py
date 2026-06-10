@@ -4,8 +4,15 @@ import logging
 from typing import List
 
 import pandas as pd
-from app.models.schemas import StopResult
+import re
+from app.models.schemas import StopResult, MatchTier
 
+try:
+    from rapidfuzz import fuzz
+    HAS_RAPIDFUZZ = True
+except ImportError:
+    import difflib
+    HAS_RAPIDFUZZ = False
 
 class StopSearch:
     """Search GTFS stop records using case-insensitive partial matching.
@@ -65,44 +72,144 @@ class StopSearch:
             if self.stops.empty:
                 return []
 
-            scored_results: List[tuple[int, str, pd.Series]] = []
+            scored_results: List[tuple[int, float, str, StopResult]] = []
 
-            for _, row in self.stops.iterrows():
-                stop_name = str(row.get("stop_name", "")).strip()
-                stop_id = str(row.get("stop_id", "")).strip()
-                name_lower = stop_name.casefold()
-                id_lower = stop_id.casefold()
-
-                score = 0
-                if name_lower.startswith(normalized_query):
-                    score += 100
-                if normalized_query in name_lower:
-                    score += 50
-                if normalized_query in id_lower:
-                    score += 20
-
-                if score == 0:
-                    continue
-
-                scored_results.append((score, name_lower, row))
-
-            scored_results.sort(key=lambda item: (-item[0], item[1], str(item[2].get("stop_id", ""))))
-
-            matches = []
-            for _, _, row in scored_results[:10]:
+            for row in self.stops.itertuples():
                 try:
-                    matches.append(
-                        StopResult(
-                            stop_id=str(row.get("stop_id", "")),
-                            stop_name=str(row.get("stop_name", "")),
-                            lat=float(row.get("stop_lat", 0.0)),
-                            lon=float(row.get("stop_lon", 0.0)),
-                        )
+                    stop_name = str(getattr(row, "stop_name", "")).strip()
+                    stop_id = str(getattr(row, "stop_id", "")).strip()
+                    name_lower = stop_name.casefold()
+                    id_lower = stop_id.casefold()
+
+                    tier = None
+                    
+                    # Tier 1: Exact stop_id match
+                    if id_lower == normalized_query or stop_id == query:
+                        tier = MatchTier.EXACT_ID
+                    # Tier 2: Exact stop_name match
+                    elif stop_name == query:
+                        tier = MatchTier.EXACT_NAME
+                    # Tier 3: Normalized exact name match
+                    elif name_lower == normalized_query:
+                        tier = MatchTier.NORMALIZED_EXACT_NAME
+                    else:
+                        # Token matching pre-computation
+                        tokens = re.split(r'\W+', name_lower)
+                        
+                        # Tier 4: Prefix match
+                        if name_lower.startswith(normalized_query):
+                            tier = MatchTier.PREFIX
+                        # Tier 5: Token match
+                        elif normalized_query in tokens:
+                            tier = MatchTier.TOKEN
+                        # Tier 6: Fuzzy/Substring match
+                        elif normalized_query in name_lower or normalized_query in id_lower:
+                            tier = MatchTier.FUZZY
+
+                    if tier is None:
+                        continue
+
+                    # Tie-breaker: penalize length difference so shorter matches are preferred
+                    tie_breaker_score = -abs(len(stop_name) - len(query))
+                    
+                    try:
+                        stop_lat = float(getattr(row, "stop_lat", 0.0))
+                        stop_lon = float(getattr(row, "stop_lon", 0.0))
+                    except (ValueError, TypeError):
+                        stop_lat = 0.0
+                        stop_lon = 0.0
+                        
+                    result_model = StopResult(
+                        stop_id=stop_id,
+                        stop_name=stop_name,
+                        lat=stop_lat,
+                        lon=stop_lon,
+                        match_tier=tier.value,
+                        match_score=tie_breaker_score
                     )
-                except (TypeError, ValueError) as exc:
+                    
+                    scored_results.append((tier.value, tie_breaker_score, name_lower, result_model))
+                except Exception as exc:
                     self.logger.warning("Skipping invalid stop row during search: %s", exc)
                     continue
 
+            # Sort by tier (ascending = better), then tie_breaker_score (descending = better), then name_lower
+            scored_results.sort(key=lambda item: (item[0], -item[1], item[2], item[3].stop_id))
+
+            has_strong_match = any(item[0] <= MatchTier.TOKEN.value for item in scored_results)
+            
+            if not has_strong_match:
+                fuzzy_results: List[tuple[int, float, str, StopResult]] = []
+                # Fallback to fuzzy matching
+                for row in self.stops.itertuples():
+                    stop_name = str(getattr(row, "stop_name", "")).strip()
+                    stop_id = str(getattr(row, "stop_id", "")).strip()
+                    name_lower = stop_name.casefold()
+                    
+                    score = 0.0
+                    if HAS_RAPIDFUZZ:
+                        score = fuzz.WRatio(normalized_query, name_lower)
+                    else:
+                        seq = difflib.SequenceMatcher(None, normalized_query, name_lower)
+                        score = seq.ratio() * 100.0
+
+                    query_tokens = [t for t in re.split(r'\W+', normalized_query) if t]
+                    candidate_tokens = [t for t in re.split(r'\W+', name_lower) if t]
+                    
+                    token_bonus = 0.0
+                    matched_tokens_count = 0
+                    
+                    for q_token in query_tokens:
+                        best_token_match = 0.0
+                        for c_token in candidate_tokens:
+                            if HAS_RAPIDFUZZ:
+                                tok_score = fuzz.ratio(q_token, c_token)
+                            else:
+                                tok_score = difflib.SequenceMatcher(None, q_token, c_token).ratio() * 100.0
+                            if tok_score > best_token_match:
+                                best_token_match = tok_score
+                        
+                        if best_token_match >= 85.0:
+                            token_bonus += 5.0
+                            matched_tokens_count += 1
+
+                    if matched_tokens_count > 1:
+                        token_bonus += 5.0 * matched_tokens_count
+
+                    if matched_tokens_count == len(query_tokens) and len(query_tokens) > 0:
+                        token_bonus += 10.0
+
+                    final_score = score + token_bonus
+                        
+                    # Safe confidence threshold (using base score to avoid false positives getting boosted)
+                    if score >= 80.0:
+                        self.logger.info("[FUZZY_RANK] candidate='%s' base_score=%.2f token_bonus=%.2f final_score=%.2f", stop_name, score, token_bonus, final_score)
+                        
+                        try:
+                            stop_lat = float(getattr(row, "stop_lat", 0.0))
+                            stop_lon = float(getattr(row, "stop_lon", 0.0))
+                        except (ValueError, TypeError):
+                            stop_lat = 0.0
+                            stop_lon = 0.0
+                            
+                        result_model = StopResult(
+                            stop_id=stop_id,
+                            stop_name=stop_name,
+                            lat=stop_lat,
+                            lon=stop_lon,
+                            match_tier=MatchTier.FUZZY.value,
+                            match_score=final_score
+                        )
+                        fuzzy_results.append((MatchTier.FUZZY.value, final_score, name_lower, result_model))
+                
+                if fuzzy_results:
+                    # Sort fuzzy results by score (descending = better)
+                    fuzzy_results.sort(key=lambda item: (-item[1], item[2], item[3].stop_id))
+                    # If we found fuzzy results above threshold, use them instead of the poor substring matches
+                    scored_results = fuzzy_results
+
+            # Return only top 10
+            matches = [item[3] for item in scored_results[:10]]
             return matches
 
         except Exception as exc:  # pragma: no cover - defensive error handling
