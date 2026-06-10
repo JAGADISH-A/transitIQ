@@ -4,17 +4,93 @@ This service keeps the existing FastAPI and TransitAgentTools architecture intac
 while adding a Foundry-compatible tool-calling layer powered by the Azure AI
 Projects SDK. The model can decide which transit tool to invoke, and this class
 executes those tool calls and returns a final natural-language response.
+
+Recovery: GPT-OSS-120B occasionally fails to emit proper OpenAI tool_calls,
+placing the intended tool name and JSON arguments inside reasoning_content
+instead. The _recover_from_reasoning() method detects this condition and
+re-routes the call through the normal execute_tool_call path.
 """
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+import re
+import uuid
+from typing import Any, Dict, List, Optional, Tuple
 
 from openai import OpenAI
 
 from app.config import get_settings
 from app.services.agent_tools import agent_tools
 from app.services.ai_planner import ai_planner
+
+
+# ---------------------------------------------------------------------------
+# Known tool names — used by recovery parser to match reasoning text
+# ---------------------------------------------------------------------------
+_KNOWN_TOOLS = frozenset({
+    "get_available_feeds",
+    "search_stops",
+    "search_stops_in_feed",
+    "nearby_stops",
+})
+
+# Pre-compiled regex: match a known tool name mentioned in free text
+_TOOL_NAME_PATTERN = re.compile(
+    r"\b(" + "|".join(re.escape(t) for t in _KNOWN_TOOLS) + r")\b"
+)
+
+# Pre-compiled regex: extract JSON objects (complete or truncated)
+_JSON_OBJECT_PATTERN = re.compile(r"\{[^{}]*\}", re.DOTALL)
+_JSON_PARTIAL_PATTERN = re.compile(r"\{[^{}]*$", re.DOTALL)  # truncated: opens but never closes
+
+# ---------------------------------------------------------------------------
+# Heuristic intent phrases → tool mapping
+# Order matters: search_stops_in_feed patterns checked before search_stops
+# because "search stops in <feed>" should match the more specific tool.
+# ---------------------------------------------------------------------------
+_HEURISTIC_RULES: List[Tuple[str, List[re.Pattern]]] = [
+    ("search_stops_in_feed", [
+        re.compile(r"search\s+(?:for\s+)?stops?\s+in\b", re.IGNORECASE),
+        re.compile(r"find\s+(?:the\s+)?stops?\s+in\b", re.IGNORECASE),
+        re.compile(r"look\s+(?:for\s+)?stops?\s+in\b", re.IGNORECASE),
+        re.compile(r"stops?\s+in\s+(?:the\s+)?\w+\s+feed", re.IGNORECASE),
+    ]),
+    ("search_stops", [
+        re.compile(r"search\s+(?:for\s+)?stops?", re.IGNORECASE),
+        re.compile(r"find\s+(?:the\s+)?(?:transit\s+)?stops?", re.IGNORECASE),
+        re.compile(r"look\s+(?:for\s+)?(?:transit\s+)?stops?", re.IGNORECASE),
+    ]),
+    ("nearby_stops", [
+        re.compile(r"nearby\s+stops?", re.IGNORECASE),
+        re.compile(r"stops?\s+near(?:by)?\b", re.IGNORECASE),
+        re.compile(r"close\s+to\b.*stops?", re.IGNORECASE),
+        re.compile(r"within\s+[\d.]+\s*(?:km|kilometer|mile)", re.IGNORECASE),
+    ]),
+    ("get_available_feeds", [
+        re.compile(r"available\s+feeds?", re.IGNORECASE),
+        re.compile(r"list\s+(?:the\s+)?feeds?", re.IGNORECASE),
+        re.compile(r"what\s+feeds?", re.IGNORECASE),
+        re.compile(r"which\s+feeds?", re.IGNORECASE),
+        re.compile(r"get\s+(?:the\s+)?feeds?", re.IGNORECASE),
+    ]),
+]
+
+# Extract quoted strings from prose (e.g., "Chennai Central")
+_QUOTED_STRING_PATTERN = re.compile(r'["\']([^"\']{2,})["\']')
+
+# Extract coordinate-like numbers from prose
+_COORDINATE_PATTERN = re.compile(
+    r'(?:lat(?:itude)?\s*[:=]?\s*([\d.+-]+))|'
+    r'(?:lon(?:gitude)?\s*[:=]?\s*([\d.+-]+))|'
+    r'(?:radius\s*[:=]?\s*([\d.]+))',
+    re.IGNORECASE,
+)
+
+# Extract feed name from prose like "in the railways feed" or "in railways"
+_FEED_IN_PROSE_PATTERN = re.compile(
+    r'(?:in\s+(?:the\s+)?)(\w+)(?:\s+feed)?',
+    re.IGNORECASE,
+)
 
 
 class FoundryTransitAgent:
@@ -65,6 +141,10 @@ class FoundryTransitAgent:
             except Exception as exc:  # pragma: no cover - runtime integration path
                 self.logger.warning("Foundry client initialization failed: %s", exc)
                 self._openai_client = None
+
+    # ------------------------------------------------------------------
+    # Tool definitions
+    # ------------------------------------------------------------------
 
     def tool_definitions(self) -> List[Dict[str, Any]]:
         """Return the JSON-schema tool definitions exposed to the model."""
@@ -159,6 +239,10 @@ class FoundryTransitAgent:
             },
         ]
 
+    # ------------------------------------------------------------------
+    # Tool dispatch
+    # ------------------------------------------------------------------
+
     def _tool_handler(self, name: str) -> Any:
         """Return a callable for the named tool, using the existing wrapper class."""
         handlers = {
@@ -198,6 +282,205 @@ class FoundryTransitAgent:
                 "content": json.dumps({"error": str(exc)}),
             }
 
+    # ------------------------------------------------------------------
+    # Reasoning-content recovery (GPT-OSS-120B workaround)
+    # ------------------------------------------------------------------
+
+    def _recover_from_reasoning(
+        self,
+        reasoning_content: str,
+        user_query: str = "",
+    ) -> Optional[Tuple[str, Dict[str, Any]]]:
+        """Attempt to extract a tool call from malformed reasoning text.
+
+        Three-tier recovery strategy:
+          Tier 1 — Exact tool name + complete JSON in reasoning.
+          Tier 2 — Heuristic phrase matching + complete/partial JSON.
+          Tier 3 — Heuristic phrase matching + argument extraction from prose.
+
+        Returns:
+            A (tool_name, arguments_dict) tuple if recovery succeeds, else None.
+        """
+        if not reasoning_content or not isinstance(reasoning_content, str):
+            return None
+
+        text = reasoning_content
+
+        # ---- Tier 1: exact tool name in text ----
+        tool_matches = _TOOL_NAME_PATTERN.findall(text)
+        inferred_tool: Optional[str] = tool_matches[-1] if tool_matches else None
+
+        if inferred_tool:
+            print(f"[RECOVERY] Tier 1: exact tool name found — {inferred_tool}")
+        else:
+            # ---- Tier 2 / Tier 3 entry: heuristic phrase matching ----
+            inferred_tool = self._infer_tool_from_phrases(text)
+            if inferred_tool:
+                print(f"[RECOVERY-INFERRED] Tier 2: heuristic matched — tool={inferred_tool}")
+            else:
+                print("[RECOVERY] No tool identified (exact or heuristic) in reasoning_content")
+                return None
+
+        # ---- Try to extract arguments (best-effort, multiple strategies) ----
+        args = self._extract_arguments(text, inferred_tool, user_query)
+        print(f"[RECOVERY-INFERRED] tool={inferred_tool} args={args}")
+        return inferred_tool, args
+
+    def _infer_tool_from_phrases(self, text: str) -> Optional[str]:
+        """Match heuristic phrases against reasoning text to infer tool intent."""
+        for tool_name, patterns in _HEURISTIC_RULES:
+            for pattern in patterns:
+                if pattern.search(text):
+                    return tool_name
+        return None
+
+    def _extract_arguments(
+        self,
+        text: str,
+        tool_name: str,
+        user_query: str,
+    ) -> Dict[str, Any]:
+        """Extract tool arguments from reasoning text using multiple strategies.
+
+        Strategy priority:
+          1. Complete JSON object in text  → return as-is.
+          2. Truncated/partial JSON repaired → merge with prose extraction
+             to fill missing keys.
+          3. Argument values extracted from prose + quoted strings.
+          4. Fallback to user_query as the search term.
+        """
+        # -- Strategy 1: complete JSON --
+        complete_args = self._try_complete_json(text)
+        if complete_args is not None:
+            print(f"[RECOVERY] Args via complete JSON: {complete_args}")
+            return complete_args
+
+        # -- Always run prose extraction (used as merge base or standalone) --
+        prose_args = self._extract_args_from_prose(text, tool_name, user_query)
+
+        # -- Strategy 2: partial / truncated JSON repair + prose merge --
+        partial_args = self._try_partial_json(text)
+        if partial_args is not None:
+            print(f"[RECOVERY] Args via partial JSON repair: {partial_args}")
+            # Merge: prose fills keys that partial JSON missed
+            merged = {**prose_args, **partial_args}
+            print(f"[RECOVERY] Merged with prose: {merged}")
+            return merged
+
+        # -- Strategy 3 & 4: prose extraction / user_query fallback --
+        print(f"[RECOVERY] Args via prose extraction: {prose_args}")
+        return prose_args
+
+    # -- argument extraction helpers --
+
+    @staticmethod
+    def _try_complete_json(text: str) -> Optional[Dict[str, Any]]:
+        """Return the last valid JSON object found in *text*, or None."""
+        candidates = _JSON_OBJECT_PATTERN.findall(text)
+        for candidate in reversed(candidates):
+            try:
+                parsed = json.loads(candidate)
+                if isinstance(parsed, dict):
+                    return parsed
+            except (json.JSONDecodeError, ValueError):
+                continue
+        return None
+
+    @staticmethod
+    def _try_partial_json(text: str) -> Optional[Dict[str, Any]]:
+        """Attempt to repair a truncated JSON object.
+
+        Handles cases like:  {"query": "Chennai Central", "feed":
+        Strategy: find the partial block, extract all complete key-value pairs
+        that were successfully written before truncation.
+        """
+        partial_match = _JSON_PARTIAL_PATTERN.search(text)
+        if not partial_match:
+            return None
+
+        fragment = partial_match.group(0)
+        print(f"[RECOVERY] Partial JSON fragment detected: {fragment!r}")
+
+        # Extract all complete "key": "value" pairs from the fragment
+        kv_pattern = re.compile(r'"(\w+)"\s*:\s*"([^"]*?)"')
+        pairs = kv_pattern.findall(fragment)
+
+        # Also extract numeric values: "key": 123.45
+        kv_num_pattern = re.compile(r'"(\w+)"\s*:\s*([\d.+-]+)')
+        num_pairs = kv_num_pattern.findall(fragment)
+
+        if not pairs and not num_pairs:
+            return None
+
+        result: Dict[str, Any] = {}
+        for key, value in pairs:
+            result[key] = value
+        for key, value in num_pairs:
+            if key not in result:  # string pairs take priority
+                try:
+                    result[key] = float(value) if "." in value else int(value)
+                except ValueError:
+                    result[key] = value
+
+        return result if result else None
+
+    @staticmethod
+    def _extract_args_from_prose(
+        text: str,
+        tool_name: str,
+        user_query: str,
+    ) -> Dict[str, Any]:
+        """Last-resort: build arguments from quoted strings and prose patterns."""
+        args: Dict[str, Any] = {}
+
+        # Tools that need no arguments
+        if tool_name == "get_available_feeds":
+            return args
+
+        # -- Extract quoted strings as candidate search terms --
+        quoted = _QUOTED_STRING_PATTERN.findall(text)
+
+        # -- Extract feed name from prose --
+        feed_match = _FEED_IN_PROSE_PATTERN.search(text)
+        feed_name = feed_match.group(1) if feed_match else None
+        # Filter out common false positives
+        if feed_name and feed_name.lower() in {
+            "the", "a", "an", "this", "that", "it", "all", "some",
+            "order", "for", "our",
+        }:
+            feed_name = None
+
+        if tool_name == "search_stops":
+            # Use first quoted string, or fall back to user_query
+            args["query"] = quoted[0] if quoted else user_query.strip()
+
+        elif tool_name == "search_stops_in_feed":
+            args["query"] = quoted[0] if quoted else user_query.strip()
+            if feed_name:
+                args["feed"] = feed_name
+            elif len(quoted) >= 2:
+                # Second quoted string might be the feed
+                args["feed"] = quoted[1]
+
+        elif tool_name == "nearby_stops":
+            # Try to extract coordinates
+            for match in _COORDINATE_PATTERN.finditer(text):
+                lat_val, lon_val, radius_val = match.groups()
+                if lat_val:
+                    args["lat"] = float(lat_val)
+                if lon_val:
+                    args["lon"] = float(lon_val)
+                if radius_val:
+                    args["radius_km"] = float(radius_val)
+            if feed_name:
+                args["feed"] = feed_name
+
+        return args
+
+    # ------------------------------------------------------------------
+    # Main answer method
+    # ------------------------------------------------------------------
+
     def answer(self, user_query: str) -> Dict[str, Any]:
         """Answer the user query using Foundry tool-calling when available.
 
@@ -218,7 +501,14 @@ class FoundryTransitAgent:
         system_prompt = (
             "You are TransitIQ, a helpful transit assistant. "
             "Use the available GTFS tools to answer questions about stops, feeds, and nearby locations. "
-            "Prefer concise, natural-language answers based on the tool results."
+            "Prefer concise, natural-language answers based on the tool results.\n\n"
+            "CRITICAL TOOL-CALLING RULES:\n"
+            "- When you need external data, you MUST emit a proper tool_call using the OpenAI function-calling format.\n"
+            "- NEVER write tool names or JSON arguments inside your reasoning or response text.\n"
+            "- NEVER describe a tool call in prose instead of actually invoking it.\n"
+            "- If you need to call a tool, use the tool_calls mechanism. Do NOT output the call as text.\n"
+            "- Each tool call must include the function name and a valid JSON arguments object.\n"
+            "- After receiving tool results, synthesize a helpful natural-language answer for the user."
         )
 
         messages: List[Dict[str, Any]] = [
@@ -229,7 +519,16 @@ class FoundryTransitAgent:
         tool_calls_used: List[str] = []
         final_answer = "I could not generate a response from the Foundry model."
 
+        print(f"\n{'='*60}")
+        print(f"[FOUNDRY-DIAG] START query={user_query!r}")
+        print(f"{'='*60}")
+
+        iteration = 0
         for _ in range(5):
+            iteration += 1
+            print(f"\n[FOUNDRY-DIAG] --- Loop iteration {iteration} ---")
+            print(f"[FOUNDRY-DIAG] Messages count before call: {len(messages)}")
+
             response = self._openai_client.chat.completions.create(
                 model=self.model_deployment,
                 messages=messages,
@@ -238,26 +537,129 @@ class FoundryTransitAgent:
                 temperature=0.1,
             )
 
+            # --- Diagnostic: completion object ---
+            print(f"[FOUNDRY-DIAG] COMPLETION (iter {iteration}) = {response}")
+            print(f"[FOUNDRY-DIAG] choices count = {len(response.choices) if response.choices else 0}")
+
+            if not response.choices:
+                print(f"[FOUNDRY-DIAG] *** WARNING: response.choices is empty/None! ***")
+
             message = response.choices[0].message
+            finish_reason = response.choices[0].finish_reason
+            print(f"[FOUNDRY-DIAG] MESSAGE (iter {iteration}) = {message}")
+            print(f"[FOUNDRY-DIAG] finish_reason  = {finish_reason}")
+            print(f"[FOUNDRY-DIAG] message.role    = {getattr(message, 'role', 'N/A')}")
+            print(f"[FOUNDRY-DIAG] message.content = {getattr(message, 'content', 'N/A')!r}")
+            print(f"[FOUNDRY-DIAG] message.content type = {type(getattr(message, 'content', None))}")
+            print(f"[FOUNDRY-DIAG] message.tool_calls = {getattr(message, 'tool_calls', 'N/A')}")
+
+            # Check for reasoning_content (GPT-OSS extended field)
+            reasoning_content = getattr(message, "reasoning_content", None) or ""
+            if reasoning_content:
+                print(f"[FOUNDRY-DIAG] reasoning_content present ({len(reasoning_content)} chars)")
+                print(f"[FOUNDRY-DIAG] reasoning_content = {reasoning_content!r:.500}")
+
             assistant_message = message.model_dump(exclude_none=True) if hasattr(message, "model_dump") else {
                 "role": getattr(message, "role", "assistant"),
                 "content": getattr(message, "content", None),
             }
+            print(f"[FOUNDRY-DIAG] assistant_message appended = {assistant_message}")
             messages.append(assistant_message)
 
             tool_calls = getattr(message, "tool_calls", None) or []
+            print(f"[FOUNDRY-DIAG] TOOL CALLS (iter {iteration}) = {tool_calls}")
+            print(f"[FOUNDRY-DIAG] tool_calls count = {len(tool_calls)}")
+
             if not tool_calls:
-                final_answer = getattr(message, "content", None) or final_answer
+                raw_content = getattr(message, "content", None)
+
+                # ---------------------------------------------------------
+                # RECOVERY: detect reasoning_content with embedded tool call
+                # ---------------------------------------------------------
+                if not raw_content and reasoning_content:
+                    print(f"[RECOVERY] Model failed to emit tool_call (iter {iteration})")
+                    print(f"[RECOVERY] finish_reason={finish_reason}, content={raw_content!r}")
+                    print(f"[RECOVERY] reasoning_content detected ({len(reasoning_content)} chars)")
+                    self.logger.warning(
+                        "[RECOVERY] GPT-OSS reasoning_content fallback triggered for query '%s'",
+                        user_query,
+                    )
+
+                    recovered = self._recover_from_reasoning(reasoning_content, user_query)
+
+                    if recovered is not None:
+                        recovered_tool, recovered_args = recovered
+                        print(f"[RECOVERY] Tool inferred: {recovered_tool}")
+                        print(f"[RECOVERY] Arguments: {recovered_args}")
+
+                        # Synthesize an OpenAI-compatible tool_call dict
+                        synthetic_id = f"recovered_{uuid.uuid4().hex[:12]}"
+                        synthetic_tool_call = {
+                            "id": synthetic_id,
+                            "type": "function",
+                            "function": {
+                                "name": recovered_tool,
+                                "arguments": json.dumps(recovered_args),
+                            },
+                        }
+
+                        # Replace the last assistant message with one that
+                        # includes the synthetic tool_call, so the model sees
+                        # a valid conversation history on the next iteration.
+                        messages[-1] = {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [synthetic_tool_call],
+                        }
+
+                        tool_calls_used.append(recovered_tool)
+                        print(f"[RECOVERY] Executing recovered tool: {recovered_tool}")
+                        tool_result = self.execute_tool_call(synthetic_tool_call)
+                        print(f"[RECOVERY] Tool completed: {tool_result}")
+                        messages.append(tool_result)
+                        print(f"[RECOVERY] Continuing conversation loop")
+
+                        # Continue — next iteration sends tool result to model.
+                        continue
+                    else:
+                        print(f"[RECOVERY] All recovery tiers failed — no tool or args could be extracted")
+                        self.logger.warning(
+                            "[RECOVERY] All tiers failed for reasoning_content: %s",
+                            reasoning_content[:500],
+                        )
+
+                # Normal exit: model returned text content (or nothing)
+                print(f"[FOUNDRY-DIAG] No tool calls — extracting final answer")
+                print(f"[FOUNDRY-DIAG] raw message.content = {raw_content!r}")
+                print(f"[FOUNDRY-DIAG] bool(raw_content)   = {bool(raw_content)}")
+                final_answer = raw_content or final_answer
+                print(f"[FOUNDRY-DIAG] final_answer after assignment = {final_answer!r}")
+                if final_answer == "I could not generate a response from the Foundry model.":
+                    print(f"[FOUNDRY-DIAG] *** BUG HIT: content was falsy, fell back to default error string ***")
+                    print(f"[FOUNDRY-DIAG] *** completion object  = {response} ***")
+                    print(f"[FOUNDRY-DIAG] *** choices count      = {len(response.choices) if response.choices else 0} ***")
+                    print(f"[FOUNDRY-DIAG] *** message.content    = {getattr(message, 'content', None)!r} ***")
+                    print(f"[FOUNDRY-DIAG] *** message.tool_calls = {getattr(message, 'tool_calls', None)} ***")
+                    print(f"[FOUNDRY-DIAG] *** reasoning_content  = {reasoning_content!r:.500} ***")
                 break
 
             for tool_call in tool_calls:
                 tool_name = getattr(getattr(tool_call, "function", None), "name", None)
+                print(f"[FOUNDRY-DIAG] Executing tool: {tool_name}")
                 if tool_name:
                     tool_calls_used.append(tool_name)
                 tool_result = self.execute_tool_call(tool_call.model_dump() if hasattr(tool_call, "model_dump") else tool_call)
+                print(f"[FOUNDRY-DIAG] TOOL RESULT ({tool_name}) = {tool_result}")
                 messages.append(tool_result)
         else:
+            print(f"[FOUNDRY-DIAG] *** Exhausted max iterations (5) ***")
             self.logger.warning("Reached maximum tool-calling iterations for query '%s'", user_query)
+
+        print(f"\n[FOUNDRY-DIAG] === RETURNING ===")
+        print(f"[FOUNDRY-DIAG] final_answer   = {final_answer!r}")
+        print(f"[FOUNDRY-DIAG] tools_used     = {tool_calls_used}")
+        print(f"[FOUNDRY-DIAG] is_default_err = {final_answer == 'I could not generate a response from the Foundry model.'}")
+        print(f"{'='*60}\n")
 
         return {
             "answer": final_answer,
