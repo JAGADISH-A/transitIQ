@@ -70,3 +70,46 @@ class RouteShapeResponse(BaseModel):
     shape_id: str
     point_count: int
     points: list[ShapePoint]
+
+
+class TripRoute(BaseModel):
+    """A GTFS route that serves a stop, used in trip-planning results."""
+
+    route_id: str
+    route_short_name: str
+    route_long_name: str
+    feed: str
+
+
+class TransferOption(BaseModel):
+    """A single-transfer journey between two stops via a transfer point."""
+
+    transfer_stop_id: str
+    transfer_stop_name: str
+    route_from: TripRoute
+    route_to: TripRoute
+    estimated_stop_count: int
+    distance_penalty: float
+    score: float
+
+
+class TripResult(BaseModel):
+    """Deterministic trip-planning result between a source and destination stop."""
+
+    source_stop_id: str
+    source_stop_name: str
+    destination_stop_id: str
+    destination_stop_name: str
+    feed: str
+    direct_routes: list[TripRoute]
+    transfer_options: list[TransferOption]
+
+
+class TripResponse(BaseModel):
+    """API response wrapping one or more trip-planning results across feeds."""
+
+    source: str
+    destination: str
+    results: list[TripResult]
+    feeds_searched: list[str]
+

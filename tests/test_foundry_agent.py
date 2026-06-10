@@ -9,7 +9,7 @@ def test_foundry_agent_exposes_expected_tool_names() -> None:
 
     tool_names = {tool["function"]["name"] for tool in service.tool_definitions()}
 
-    assert {"get_available_feeds", "search_stops", "search_stops_in_feed", "nearby_stops"} <= tool_names
+    assert {"get_available_feeds", "search_stops", "search_stops_in_feed", "nearby_stops", "find_trip"} <= tool_names
 
 
 def test_foundry_agent_can_execute_tool_calls() -> None:

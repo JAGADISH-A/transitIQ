@@ -32,6 +32,7 @@ _KNOWN_TOOLS = frozenset({
     "search_stops",
     "search_stops_in_feed",
     "nearby_stops",
+    "find_trip",
 })
 
 # Pre-compiled regex: match a known tool name mentioned in free text
@@ -49,6 +50,14 @@ _JSON_PARTIAL_PATTERN = re.compile(r"\{[^{}]*$", re.DOTALL)  # truncated: opens 
 # because "search stops in <feed>" should match the more specific tool.
 # ---------------------------------------------------------------------------
 _HEURISTIC_RULES: List[Tuple[str, List[re.Pattern]]] = [
+    ("find_trip", [
+        re.compile(r"how\s+(?:do|to|can)\s+(?:i\s+)?get\s+from\b", re.IGNORECASE),
+        re.compile(r"plan\s+(?:a\s+)?trip\s+from\b", re.IGNORECASE),
+        re.compile(r"travel\s+from\b", re.IGNORECASE),
+        re.compile(r"trip\s+from\b", re.IGNORECASE),
+        re.compile(r"route\s+between\b", re.IGNORECASE),
+        re.compile(r"directions\s+from\b", re.IGNORECASE),
+    ]),
     ("search_stops_in_feed", [
         re.compile(r"search\s+(?:for\s+)?stops?\s+in\b", re.IGNORECASE),
         re.compile(r"find\s+(?:the\s+)?stops?\s+in\b", re.IGNORECASE),
@@ -165,6 +174,28 @@ class FoundryTransitAgent:
             {
                 "type": "function",
                 "function": {
+                    "name": "find_trip",
+                    "description": "Find transit routes between a source and destination stop. Returns direct routes if available, otherwise suggests transfer options.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "source": {
+                                "type": "string",
+                                "description": "Source stop name or ID."
+                            },
+                            "destination": {
+                                "type": "string",
+                                "description": "Destination stop name or ID."
+                            }
+                        },
+                        "required": ["source", "destination"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "search_stops",
                     "description": "Find transit stops by stop name or stop ID across all loaded GTFS feeds.",
                     "parameters": {
@@ -250,6 +281,7 @@ class FoundryTransitAgent:
             "search_stops": agent_tools.search_stops,
             "search_stops_in_feed": agent_tools.search_stops_in_feed,
             "nearby_stops": agent_tools.nearby_stops,
+            "find_trip": agent_tools.find_trip,
         }
         if name not in handlers:
             raise ValueError(f"Unsupported tool '{name}'.")
@@ -501,6 +533,7 @@ class FoundryTransitAgent:
         system_prompt = (
             "You are TransitIQ, a helpful transit assistant. "
             "Use the available GTFS tools to answer questions about stops, feeds, and nearby locations. "
+            "Use find_trip when the user asks how to travel from one stop to another. "
             "Prefer concise, natural-language answers based on the tool results.\n\n"
             "CRITICAL TOOL-CALLING RULES:\n"
             "- When you need external data, you MUST emit a proper tool_call using the OpenAI function-calling format.\n"

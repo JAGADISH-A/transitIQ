@@ -98,4 +98,37 @@ class TransitAgentTools:
             raise RuntimeError(message) from exc
 
 
+    def find_trip(self, source: str, destination: str) -> dict:
+        """Find routes between source and destination stops.
+        
+        Args:
+            source: Source stop name or ID.
+            destination: Destination stop name or ID.
+            
+        Returns:
+            A dict representation of the TripResponse containing direct and transfer routes.
+        """
+        try:
+            if not isinstance(source, str) or not source.strip():
+                raise ValueError("source must be a non-empty string.")
+            if not isinstance(destination, str) or not destination.strip():
+                raise ValueError("destination must be a non-empty string.")
+
+            result = transit_service.find_trip(source=source, destination=destination)
+            self.logger.info(
+                "Agent requested trip from '%s' to '%s': %d feed(s) searched, %d result(s)",
+                source,
+                destination,
+                len(result.feeds_searched),
+                len(result.results),
+            )
+            return result.model_dump()
+        except ValueError:
+            raise
+        except Exception as exc:  # pragma: no cover - defensive error handling
+            message = f"Failed to find trip from '{source}' to '{destination}': {exc}"
+            self.logger.exception(message)
+            raise RuntimeError(message) from exc
+
+
 agent_tools = TransitAgentTools()
