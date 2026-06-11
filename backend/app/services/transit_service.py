@@ -11,6 +11,33 @@ from app.services.gtfs_loader import GTFSLoader
 from app.services.stop_search import StopSearch
 from app.utils.geo_utils import haversine
 
+def parse_gtfs_time_to_display(gtfs_time_str: str | None) -> "DisplayTime | None":
+    from app.models.schemas import DisplayTime
+    if not gtfs_time_str or str(gtfs_time_str).strip() == "nan":
+        return None
+        
+    parts = str(gtfs_time_str).strip().split(":")
+    if len(parts) < 2:
+        return None
+        
+    try:
+        hours = int(parts[0])
+        minutes = int(parts[1])
+        
+        day_offset = hours // 24
+        normalized_hours = hours % 24
+        
+        ampm = "PM" if normalized_hours >= 12 else "AM"
+        display_hour = normalized_hours % 12
+        if display_hour == 0:
+            display_hour = 12
+            
+        display_time = f"{display_hour:02d}:{minutes:02d} {ampm}"
+        
+        return DisplayTime(display_time=display_time, day_offset=day_offset)
+    except ValueError:
+        return None
+
 
 class TransitService:
     """Central service for GTFS access and stop searching.
@@ -1001,7 +1028,9 @@ class TransitService:
 
             if "departure_time_source" in valid_trips.columns:
                 if departure_after:
-                    valid_trips = valid_trips[valid_trips["departure_time_source"].astype(str) >= departure_after]
+                    dep_after_pad = departure_after.strip().zfill(8)
+                    dt_series = valid_trips["departure_time_source"].astype(str).str.strip().str.zfill(8)
+                    valid_trips = valid_trips[dt_series >= dep_after_pad]
                 
                 if valid_trips.empty:
                     self.logger.debug("Feed '%s': trips found but none matched departure_after", feed_name)
@@ -1075,6 +1104,8 @@ class TransitService:
                         stops_between=stops_between,
                         departure_time=departure_time,
                         arrival_time=arrival_time,
+                        departure_display=parse_gtfs_time_to_display(departure_time),
+                        arrival_display=parse_gtfs_time_to_display(arrival_time),
                         duration_minutes=duration_minutes,
                         shape_id=shape_id,
                     )
@@ -1113,11 +1144,18 @@ class TransitService:
 
     def find_transfer_routes(self, source_stop_id: str, destination_stop_id: str, departure_after: str | None = None) -> list["TransferJourney"]:
         """Find one-transfer trips between two stops across all loaded feeds."""
-        from app.models.schemas import JourneyRoute, TransferJourney, JourneyType
+        from app.models.schemas import JourneyRoute, TransferJourney, JourneyType, DisplayTime
         import pandas as pd
 
         transfer_journeys: list[TransferJourney] = []
         MAX_TRANSFER_CANDIDATES = 100
+
+        self.logger.info("TRANSFER SEARCH START")
+        
+        # Track statistics
+        stats_candidates_generated = 0
+        stats_candidates_filtered = 0
+
 
         for feed_name, loader in self._feeds.items():
             stop_times = loader.stop_times
@@ -1134,7 +1172,9 @@ class TransitService:
                 continue
 
             if departure_after:
-                source_st = source_st[source_st["departure_time"].astype(str) >= departure_after]
+                dep_after_pad = departure_after.strip().zfill(8)
+                dt_series = source_st["departure_time"].astype(str).str.strip().str.zfill(8)
+                source_st = source_st[dt_series >= dep_after_pad]
 
             if source_st.empty:
                 continue
@@ -1208,6 +1248,15 @@ class TransitService:
                     if pd.isna(arr_time) or not arr_time.strip() or arr_time == "nan":
                         continue
 
+                    # Filter first leg trip against departure_after if provided
+                    first_dep_time_source = str(arr_row["departure_time_source"])
+                    if departure_after:
+                        dep_after_pad = departure_after.strip().zfill(8)
+                        dt_series_val = first_dep_time_source.strip().zfill(8)
+                        if dt_series_val < dep_after_pad:
+                            stats_candidates_filtered += 1
+                            continue
+
                     # Step 4: Validate transfer timing
                     # arrival(first_leg) < departure(second_leg)
                     # Minimum transfer time: 3 minutes
@@ -1259,6 +1308,21 @@ class TransitService:
                         second_trip = trips[trips["trip_id"] == second_trip_id].iloc[0]
                         second_route_id = str(second_trip["route_id"])
                         
+                        stats_candidates_generated += 1
+                        
+                        self.logger.info("Candidate first-leg trip\ndeparture_time=%s\nCandidate second-leg trip\ndeparture_time=%s\nTransfer wait=%s", first_dep_time, second_dep_time, transfer_wait)
+                        
+                        # Apply departure_after filter to second leg too!
+                        if departure_after:
+                            dep_after_pad = departure_after.strip().zfill(8)
+                            dt_second_val = second_dep_time.strip().zfill(8)
+                            if dt_second_val < dep_after_pad:
+                                self.logger.info("Filtered because departure is before current time")
+                                self.logger.info("Rejected transfer route")
+                                stats_candidates_filtered += 1
+                                continue
+
+                        
                         dedupe_key = (t_stop_id, first_route_id, second_route_id)
                         if dedupe_key in seen_transfer_pairs:
                             continue
@@ -1295,6 +1359,8 @@ class TransitService:
                                 stops_between=int(arr_row["stop_sequence"]) - int(arr_row["stop_sequence_source"]),
                                 departure_time=first_dep_time,
                                 arrival_time=arr_time,
+                                departure_display=parse_gtfs_time_to_display(first_dep_time),
+                                arrival_display=parse_gtfs_time_to_display(arr_time),
                                 duration_minutes=first_duration,
                                 shape_id=str(first_trip.get("shape_id")) if pd.notna(first_trip.get("shape_id")) else None
                             )
@@ -1310,6 +1376,8 @@ class TransitService:
                                 stops_between=int(dep_row["stop_sequence_dest"]) - int(dep_row["stop_sequence"]),
                                 departure_time=second_dep_time,
                                 arrival_time=second_arr_time,
+                                departure_display=parse_gtfs_time_to_display(second_dep_time),
+                                arrival_display=parse_gtfs_time_to_display(second_arr_time),
                                 duration_minutes=second_duration,
                                 shape_id=str(second_trip.get("shape_id")) if pd.notna(second_trip.get("shape_id")) else None
                             )
@@ -1322,6 +1390,8 @@ class TransitService:
                                 total_duration=total_duration,
                                 transfer_wait=transfer_wait
                             ))
+                            
+                            self.logger.info("Accepted transfer route")
 
                             if len(seen_transfer_pairs) >= MAX_TRANSFER_CANDIDATES:
                                 break
@@ -1336,6 +1406,11 @@ class TransitService:
             j.transfer_wait,
             j.total_duration
         ))
+
+        self.logger.info("Current system time: %s", departure_after)
+        self.logger.info("Total transfer candidates generated: %d", stats_candidates_generated)
+        self.logger.info("Total transfer candidates filtered: %d", stats_candidates_filtered)
+        self.logger.info("Total transfer candidates returned: %d", len(transfer_journeys))
 
         return transfer_journeys
 
@@ -1380,6 +1455,8 @@ class TransitService:
                 stop_sequence=int(row["stop_sequence"]),
                 arrival_time=arr_time,
                 departure_time=dep_time,
+                arrival_display=parse_gtfs_time_to_display(arr_time),
+                departure_display=parse_gtfs_time_to_display(dep_time),
                 stop_lat=lat,
                 stop_lon=lon
             ))

@@ -6,6 +6,7 @@ import TransitMap from './components/map/TransitMap';
 import RecommendedRoutes from './components/RecommendedRoutes';
 import FloatingAIAssistant from './components/FloatingAIAssistant';
 import JourneyExplorer from './components/JourneyExplorer';
+import { GlobalAlertModal } from './components/GlobalAlertModal';
 
 interface StopResult {
   stop_id: string;
@@ -20,7 +21,51 @@ interface SearchResponse {
   count: number;
 }
 
-interface JourneyRoute {
+export interface DisplayTime {
+  display_time: string;
+  day_offset: number;
+}
+
+export interface ActiveJourney {
+  source: string;
+  destination: string;
+  departure_time: string;
+  transfer_station?: string;
+  transfer_count: number;
+}
+
+export interface PreviousRouteComparison {
+  duration_minutes: number;
+  transfer_count: number;
+  quality_classification: string;
+}
+
+export interface JourneyContext {
+  source?: string;
+  destination?: string;
+  departure_time?: string;
+  route_preference?: string;
+  last_updated?: string;
+  active_journey?: ActiveJourney;
+  previous_comparison?: PreviousRouteComparison;
+}
+
+export interface JourneyNarrative {
+  headline: string;
+  summary: string;
+  recommendation: string;
+  warnings: string[];
+  alternatives_available: number;
+}
+
+export interface JourneyQuality {
+  score: number;
+  classification: "Excellent" | "Good" | "Acceptable" | "Poor" | "Low Quality" | "Rejected";
+  recommendation_reason?: string;
+  route_flags: string[];
+}
+
+export interface JourneyRoute {
   feed: string;
   trip_id: string;
   route_id: string;
@@ -29,7 +74,12 @@ interface JourneyRoute {
   destination_stop: string;
   stops_between: number;
   departure_time?: string;
+  arrival_time?: string;
+  departure_display?: DisplayTime;
+  arrival_display?: DisplayTime;
+  duration_minutes?: number;
   shape_id?: string;
+  quality?: JourneyQuality;
 }
 
 interface TransferJourney {
@@ -39,10 +89,12 @@ interface TransferJourney {
   second_leg: JourneyRoute;
   total_duration: number;
   transfer_wait: number;
+  quality?: JourneyQuality;
 }
 
 interface JourneyResponse {
   success: boolean;
+  narrative?: JourneyNarrative;
   routes: JourneyRoute[];
   transfer_routes: TransferJourney[];
 }
@@ -53,6 +105,8 @@ export interface TripStop {
   stop_sequence: number;
   arrival_time?: string;
   departure_time?: string;
+  arrival_display?: DisplayTime;
+  departure_display?: DisplayTime;
   stop_lat?: number;
   stop_lon?: number;
 }
@@ -194,7 +248,7 @@ function App() {
     setError(null);
   };
 
-  const handleSearch = async (source: string, destination: string, departureTime?: string) => {
+  const handleSearch = async (source: string, destination: string, departureTime?: string): Promise<{directCount: number; transferCount: number; source: string; destination: string; error?: string; narrative?: JourneyNarrative; topDirectRoute?: JourneyRoute; topTransferRoute?: TransferJourney}> => {
     setIsLoading(true);
     setError(null);
     setJourneyRoutes([]);
@@ -252,14 +306,28 @@ function App() {
         if (data.success && (data.routes.length > 0 || data.transfer_routes.length > 0)) {
           setJourneyRoutes(data.routes);
           setTransferRoutes(data.transfer_routes || []);
+          return { 
+             directCount: data.routes.length, 
+             transferCount: (data.transfer_routes || []).length, 
+             source: s.stop_name, 
+             destination: d.stop_name, 
+             narrative: data.narrative,
+             topDirectRoute: data.routes[0],
+             topTransferRoute: data.transfer_routes ? data.transfer_routes[0] : undefined
+          };
         } else {
           setError('No routes found between these stops.');
+          return { directCount: 0, transferCount: 0, source: s.stop_name, destination: d.stop_name, narrative: data.narrative };
         }
       }
+      
+      return { directCount: 0, transferCount: 0, source, destination, error: 'Journey search failed' };
 
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'An unexpected error occurred during search.');
+      const errMsg = err.message || 'An unexpected error occurred during search.';
+      setError(errMsg);
+      return { directCount: 0, transferCount: 0, source, destination, error: errMsg };
     } finally {
       setIsLoading(false);
     }
@@ -325,11 +393,6 @@ function App() {
                   initialDestination={destinationName || ''}
                   initialTime={searchTime}
                 />
-                {error && (
-                  <div className="bg-red-500/10 border border-red-500/50 rounded-xl p-4 text-red-500 text-sm">
-                    {error}
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -354,7 +417,15 @@ function App() {
       </main>
 
       {/* 4. Floating AI Assistant (Bottom Right) */}
-      <FloatingAIAssistant />
+      <FloatingAIAssistant onSearch={handleSearch} activeRoute={selectedRoute || selectedTransferRoute} />
+
+      {/* Global Alert Modal */}
+      <GlobalAlertModal
+        isOpen={!!error}
+        onClose={() => setError(null)}
+        message={error || ""}
+        title="Search Error"
+      />
     </div>
   );
 }

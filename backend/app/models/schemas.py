@@ -3,6 +3,60 @@
 from enum import Enum, IntEnum
 from pydantic import BaseModel
 
+class DisplayTime(BaseModel):
+    display_time: str
+    day_offset: int
+
+class IntentType(str, Enum):
+    NEW_SEARCH = "NEW_SEARCH"
+    MODIFY_TIME = "MODIFY_TIME"
+    MODIFY_FILTER = "MODIFY_FILTER"
+    OPTIMIZE_ROUTE = "OPTIMIZE_ROUTE"
+    EXPLAIN_ROUTE = "EXPLAIN_ROUTE"
+    CONTEXT_EXPIRED = "CONTEXT_EXPIRED"
+
+class ActiveJourney(BaseModel):
+    source: str
+    destination: str
+    departure_time: str
+    transfer_station: str | None = None
+    transfer_count: int = 0
+
+class PreviousRouteComparison(BaseModel):
+    duration_minutes: int
+    transfer_count: int
+    quality_classification: str
+
+class JourneyContext(BaseModel):
+    source: str | None = None
+    destination: str | None = None
+    departure_time: str | None = None
+    route_preference: str | None = None
+    last_updated: str | None = None
+    active_journey: ActiveJourney | None = None
+    previous_comparison: PreviousRouteComparison | None = None
+
+class QualityClassification(str, Enum):
+    EXCELLENT = "Excellent"
+    GOOD = "Good"
+    ACCEPTABLE = "Acceptable"
+    POOR = "Poor"
+    LOW_QUALITY = "Low Quality"
+    REJECTED = "Rejected"
+
+class JourneyQuality(BaseModel):
+    score: float
+    classification: QualityClassification
+    recommendation_reason: str | None = None
+    route_flags: list[str] = []
+
+class JourneyNarrative(BaseModel):
+    headline: str
+    summary: str
+    recommendation: str
+    warnings: list[str]
+    alternatives_available: int
+
 
 class MatchTier(IntEnum):
     """Deterministic ranking tiers for stop matching. Lower number is better priority."""
@@ -120,6 +174,8 @@ class TripStop(BaseModel):
     stop_sequence: int
     arrival_time: str | None = None
     departure_time: str | None = None
+    arrival_display: DisplayTime | None = None
+    departure_display: DisplayTime | None = None
     stop_lat: float | None = None
     stop_lon: float | None = None
 
@@ -167,8 +223,11 @@ class JourneyRoute(BaseModel):
     stops_between: int
     departure_time: str | None = None
     arrival_time: str | None = None
+    departure_display: DisplayTime | None = None
+    arrival_display: DisplayTime | None = None
     duration_minutes: int | None = None
     shape_id: str | None = None
+    quality: JourneyQuality | None = None
 
 
 class TransferJourney(BaseModel):
@@ -179,10 +238,31 @@ class TransferJourney(BaseModel):
     second_leg: JourneyRoute
     total_duration: int
     transfer_wait: int
+    quality: JourneyQuality | None = None
 
 
 class JourneyResponse(BaseModel):
     """Response containing matching direct routes for a journey."""
     success: bool
+    narrative: JourneyNarrative | None = None
     routes: list[JourneyRoute]
     transfer_routes: list[TransferJourney] = []
+
+
+
+class JourneyIntentRequest(BaseModel):
+    """Request model for natural language journey extraction."""
+
+    prompt: str
+    context: JourneyContext | None = None
+
+
+class JourneyIntentResponse(BaseModel):
+    """Response containing extracted journey parameters and intent type."""
+
+    intent_type: IntentType = IntentType.NEW_SEARCH
+    source: str | None = None
+    destination: str | None = None
+    departure_time: str | None = None
+    preference: str | None = None
+    error_message: str | None = None

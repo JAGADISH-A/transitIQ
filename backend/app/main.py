@@ -12,6 +12,7 @@ from app.api.health import router as health_router
 from app.api.journey import router as journey_router
 from app.api.routes import router as routes_router
 from app.api.stops import router as stops_router
+from app.api.ai import router as ai_router
 from app.config import get_settings
 from app.services.transit_service import transit_service
 
@@ -50,3 +51,4 @@ app.include_router(routes_router)
 app.include_router(feeds_router)
 app.include_router(agent_router)
 app.include_router(journey_router)
+app.include_router(ai_router)

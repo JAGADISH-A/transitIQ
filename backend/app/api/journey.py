@@ -1,10 +1,10 @@
 """Journey planner API endpoint."""
 import logging
-from fastapi import APIRouter, Query
-
 from app.models.schemas import JourneyResponse, TripStopsResponse
-from fastapi import HTTPException
+from fastapi import APIRouter, Query, HTTPException
 from app.services.transit_service import transit_service
+from app.services.quality_engine import JourneyQualityEngine
+from app.services.journey_narrator import JourneyNarratorService
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,10 @@ def get_journey(
         departure_after,
     )
 
+    if not departure_after:
+        now = datetime.now()
+        departure_after = f"{now.hour:02d}:{now.minute:02d}:{now.second:02d}"
+
     routes = transit_service.get_direct_journeys(
         source_stop_id, destination_stop_id, departure_after
     )
@@ -32,6 +36,16 @@ def get_journey(
     transfer_routes = transit_service.find_transfer_routes(
         source_stop_id, destination_stop_id, departure_after
     )
+
+    if not routes and not transfer_routes and departure_after:
+        # If all journeys for today have expired, automatically search for next available service
+        logger.info("No active journeys found after %s, searching next available service", departure_after)
+        routes = transit_service.get_direct_journeys(
+            source_stop_id, destination_stop_id, "00:00:00"
+        )
+        transfer_routes = transit_service.find_transfer_routes(
+            source_stop_id, destination_stop_id, "00:00:00"
+        )
 
     logger.info(
         "Journey search result: source='%s', destination='%s', departure_after='%s', routes_found=%d, transfers_found=%d",
@@ -42,7 +56,11 @@ def get_journey(
         len(transfer_routes)
     )
 
-    return JourneyResponse(success=True, routes=routes, transfer_routes=transfer_routes)
+    routes, transfer_routes = JourneyQualityEngine.evaluate(routes, transfer_routes, departure_after)
+    
+    narrative = JourneyNarratorService.generate_narrative(routes, transfer_routes)
+
+    return JourneyResponse(success=True, narrative=narrative, routes=routes, transfer_routes=transfer_routes)
 
 
 @router.get("/trips/{feed_name}/{trip_id}/stops", response_model=TripStopsResponse)

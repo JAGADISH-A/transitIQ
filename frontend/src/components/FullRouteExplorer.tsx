@@ -1,13 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
-
-export interface TripStop {
-  stop_id: string;
-  stop_name: string;
-  stop_sequence: number;
-  arrival_time?: string;
-  departure_time?: string;
-}
+import { GlobalAlertModal } from './GlobalAlertModal';
+import { TripStop } from '../App';
 
 interface TripStopsResponse {
   feed: string;
@@ -24,20 +18,6 @@ interface FullRouteExplorerProps {
   destinationStopName: string; // To highlight
   routeName: string;
   preloadedStops?: TripStop[];
-}
-
-function formatTime(timeString?: string) {
-  if (!timeString) return '';
-  const parts = timeString.split(':');
-  if (parts.length >= 2) {
-    let hours = parseInt(parts[0], 10);
-    const minutes = parts[1];
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12;
-    hours = hours ? hours : 12;
-    return `${hours}:${minutes} ${ampm}`;
-  }
-  return timeString;
 }
 
 export default function FullRouteExplorer({
@@ -124,11 +104,7 @@ export default function FullRouteExplorer({
             </div>
           )}
 
-          {error && !isLoading && (
-            <div className="flex flex-col items-center justify-center h-full gap-4 text-red-400">
-              <p>{error}</p>
-            </div>
-          )}
+          {/* Replaced inline error with GlobalAlertModal */}
 
           {!isLoading && !error && stops.length > 0 && (
             <div className="relative pl-6">
@@ -186,8 +162,15 @@ export default function FullRouteExplorer({
                       <span className={`font-medium text-sm ${isSource || isDest ? 'text-white' : 'text-white/80'}`}>
                         {stop.stop_name}
                       </span>
-                      <div className="text-xs text-white/50 tabular-nums mt-0.5">
-                        {formatTime(stop.arrival_time || stop.departure_time)}
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <div className="text-xs text-white/50 tabular-nums">
+                          {stop.arrival_display?.display_time || stop.departure_display?.display_time || '-'}
+                        </div>
+                        {((stop.arrival_display?.day_offset || 0) > 0 || (stop.departure_display?.day_offset || 0) > 0) && (
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-[#FF4500] bg-[#FF4500]/10 px-1 rounded">
+                            +{(stop.arrival_display?.day_offset || stop.departure_display?.day_offset)} Day
+                          </span>
+                        )}
                       </div>
                       {isSource && <span className="text-xs text-green-400 mt-1 font-medium">Board Here</span>}
                       {isDest && <span className="text-xs text-red-400 mt-1 font-medium">Get Off Here</span>}
@@ -199,6 +182,13 @@ export default function FullRouteExplorer({
           )}
         </div>
       </div>
+
+      <GlobalAlertModal
+        isOpen={!!error && !isLoading}
+        onClose={() => setError(null)}
+        message={error || ""}
+        title="Route Load Error"
+      />
     </>
   );
 }

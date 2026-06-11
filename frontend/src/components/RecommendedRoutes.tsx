@@ -1,34 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { Train, Bus, Zap, X, Loader2 } from 'lucide-react';
 import FullRouteExplorer from './FullRouteExplorer';
-
-interface JourneyRoute {
-  feed: string;
-  trip_id: string;
-  route_id: string;
-  route_name: string;
-  source_stop: string;
-  destination_stop: string;
-  stops_between: number;
-  departure_time?: string;
-  arrival_time?: string;
-  duration_minutes?: number;
-}
-
-function formatTime(timeString?: string) {
-  if (!timeString) return null;
-  const parts = timeString.split(':');
-  if (parts.length >= 2) {
-    let hours = parseInt(parts[0], 10);
-    const minutes = parts[1];
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12;
-    hours = hours ? hours : 12;
-    return `${hours}:${minutes} ${ampm}`;
-  }
-  return timeString;
-}
-
+import { GlobalAlertModal } from './GlobalAlertModal';
+import { JourneyRoute } from '../App';
+import { RouteFlags } from './RouteFlags';
 interface RecommendedRoutesProps {
   routes?: JourneyRoute[];
   transferRoutes?: any[];
@@ -57,7 +32,12 @@ export default function RecommendedRoutes({
   tripStops = []
 }: RecommendedRoutesProps) {
   const [showExplorer, setShowExplorer] = useState(false);
+  const [hasDismissedWarning, setHasDismissedWarning] = useState(false);
   const selectedRouteRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setHasDismissedWarning(false);
+  }, [routes, transferRoutes]);
 
   useEffect(() => {
     if (selectedRoute) {
@@ -92,8 +72,6 @@ export default function RecommendedRoutes({
     );
   }
 
-  // Deduplicate and limit to top 3 for UI
-  // Group by route_id and pick the first one to avoid showing 10 of the same train
   const uniqueRoutes: JourneyRoute[] = [];
   const seenRouteIds = new Set<string>();
   
@@ -104,7 +82,10 @@ export default function RecommendedRoutes({
     }
   }
 
-  let displayRoutes = uniqueRoutes.slice(0, 3);
+  // Filter out rejected routes from top 3
+  const validUniqueRoutes = uniqueRoutes.filter(r => r.quality?.classification !== "Rejected");
+
+  let displayRoutes = validUniqueRoutes.slice(0, 3);
 
   if (selectedRoute) {
     const isSelectedInTop3 = displayRoutes.some(r => r.trip_id === selectedRoute.trip_id);
@@ -113,20 +94,9 @@ export default function RecommendedRoutes({
     }
   }
 
-  const sortedTransfers = [...transferRoutes].sort((a, b) => {
-    // 1. Earliest Arrival
-    const arrA = a.second_leg.arrival_time || '99:99';
-    const arrB = b.second_leg.arrival_time || '99:99';
-    if (arrA !== arrB) return arrA.localeCompare(arrB);
-    
-    // 2. Lowest Transfer Wait
-    if (a.transfer_wait !== b.transfer_wait) return a.transfer_wait - b.transfer_wait;
-    
-    // 3. Shortest Duration
-    return a.total_duration - b.total_duration;
-  });
-  
-  let displayTransfers = sortedTransfers.slice(0, 3);
+  // Same for transfers
+  const validTransfers = transferRoutes.filter(r => r.quality?.classification !== "Rejected");
+  let displayTransfers = validTransfers.slice(0, 3);
 
   if (selectedTransferRoute) {
     const isSelectedInTop3 = displayTransfers.some(
@@ -138,27 +108,7 @@ export default function RecommendedRoutes({
     }
   }
 
-  const rankByDuration = [...displayRoutes].sort((a,b) => (a.duration_minutes??Infinity) - (b.duration_minutes??Infinity));
-  const rankByArrival = [...displayRoutes].sort((a,b) => (a.arrival_time||'99:99').localeCompare(b.arrival_time||'99:99'));
-  const rankByDeparture = [...displayRoutes].sort((a,b) => (a.departure_time||'99:99').localeCompare(b.departure_time||'99:99'));
 
-  let fastestTripId = rankByDuration[0]?.trip_id || null;
-  let earliestArrivalTripId = rankByArrival[0]?.trip_id || null;
-  let nextDepartureTripId = rankByDeparture[0]?.trip_id || null;
-
-  let bestScore = Infinity;
-  let recommendedTripId: string | null = null;
-
-  displayRoutes.forEach(r => {
-    const dRank = rankByDuration.findIndex(x => x.trip_id === r.trip_id);
-    const aRank = rankByArrival.findIndex(x => x.trip_id === r.trip_id);
-    const depRank = rankByDeparture.findIndex(x => x.trip_id === r.trip_id);
-    const score = dRank + aRank + depRank;
-    if (score < bestScore) {
-      bestScore = score;
-      recommendedTripId = r.trip_id;
-    }
-  });
 
   return (
     <div className="flex flex-col gap-4 mt-2">
@@ -235,31 +185,23 @@ export default function RecommendedRoutes({
               <div className={`flex flex-col gap-3 ${isSelected ? 'mb-5' : 'mb-4'}`}>
                 {/* Top Row: Badge & Close Button */}
                 <div className="flex items-start justify-between">
-                  {(() => {
-                    let badgeText = "";
-                    let badgeClass = "";
-                    if (isSelected) {
-                      badgeText = "✅ Selected Route";
-                      badgeClass = "bg-[#10B981]/20 text-[#10B981]";
-                    } else if (route.trip_id === recommendedTripId) {
-                      badgeText = "⭐ Recommended";
-                      badgeClass = "bg-[#3B82F6]/10 text-[#3B82F6]";
-                    } else if (route.trip_id === earliestArrivalTripId) {
-                      badgeText = "🏆 Earliest Arrival";
-                      badgeClass = "bg-yellow-500/10 text-yellow-400";
-                    } else if (route.trip_id === fastestTripId) {
-                      badgeText = "⚡ Fastest Journey";
-                      badgeClass = "bg-[#FF4500]/10 text-[#FF4500]";
-                    } else if (route.trip_id === nextDepartureTripId) {
-                      badgeText = "🚆 Next Departure";
-                      badgeClass = "bg-indigo-500/10 text-indigo-400";
-                    } else {
-                      badgeText = "Alternative";
-                      badgeClass = "bg-white/10 text-white/70";
-                    }
                     return (
-                      <div className={`text-xs px-2 py-1 rounded-md font-semibold shrink-0 ${badgeClass}`}>
-                        {badgeText}
+                      <div className="flex items-center gap-2">
+                        {isSelected && (
+                          <div className="text-xs px-2 py-1 rounded-md font-semibold shrink-0 bg-[#10B981]/20 text-[#10B981]">
+                            ✅ Selected Route
+                          </div>
+                        )}
+                        {route.quality && !isSelected && (
+                          <div className={`text-xs px-2 py-1 rounded-md font-semibold shrink-0 ${
+                            route.quality.classification === 'Excellent' ? 'bg-[#10B981]/20 text-[#10B981]' :
+                            route.quality.classification === 'Good' ? 'bg-[#3B82F6]/20 text-[#3B82F6]' :
+                            route.quality.classification === 'Acceptable' ? 'bg-yellow-500/20 text-yellow-400' :
+                            'bg-[#FF4500]/20 text-[#FF4500]'
+                          }`}>
+                            {route.quality.classification === 'Excellent' ? '⭐ Excellent' : route.quality.classification} ({Math.round(route.quality.score)})
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
@@ -281,17 +223,37 @@ export default function RecommendedRoutes({
                 {!isSelected ? (
                   <>
                     <div className="flex flex-col gap-0.5">
-                      {route.departure_time && (
-                        <div className="text-xl font-bold text-white tracking-wide">
-                          {formatTime(route.departure_time)}
+                      {route.departure_display && (
+                        <div className="flex items-center gap-2">
+                          <div className="text-xl font-bold text-white tracking-wide">
+                            {route.departure_display.display_time}
+                          </div>
+                          {route.departure_display.day_offset > 0 && (
+                            <span className="text-[10px] font-bold bg-[#FF4500]/20 text-[#FF4500] px-1.5 py-0.5 rounded uppercase tracking-wider">
+                              +{route.departure_display.day_offset} Day
+                            </span>
+                          )}
                         </div>
                       )}
                       <h4 className="text-base leading-tight text-white/80 font-medium" title={route.route_name}>
                         {route.route_name}
                       </h4>
-                      {(route.arrival_time || route.duration_minutes !== undefined) && (
+                      {route.quality?.recommendation_reason && (
+                        <div className="text-xs text-[#10B981] mt-0.5 font-medium">{route.quality.recommendation_reason}</div>
+                      )}
+                      <RouteFlags flags={route.quality?.route_flags} />
+                      {(route.arrival_display || route.duration_minutes !== undefined) && (
                         <div className="flex flex-col gap-0.5 mt-1.5 text-sm font-medium text-white/60">
-                          {route.arrival_time && <div>Arrives {formatTime(route.arrival_time)}</div>}
+                          {route.arrival_display && (
+                            <div className="flex items-center gap-1.5">
+                              Arrives {route.arrival_display.display_time}
+                              {route.arrival_display.day_offset > 0 && (
+                                <span className="text-[10px] font-bold bg-[#FF4500]/20 text-[#FF4500] px-1.5 py-0.5 rounded uppercase tracking-wider">
+                                  +{route.arrival_display.day_offset} Day
+                               </span>
+                              )}
+                            </div>
+                          )}
                           {route.duration_minutes !== undefined && <div>Duration {route.duration_minutes} min</div>}
                         </div>
                       )}
@@ -312,7 +274,7 @@ export default function RecommendedRoutes({
                       </div>
                       
                       <div className="flex items-center gap-1.5">
-                        <Zap size={14} className={route.trip_id === fastestTripId ? 'text-[#FF4500]' : 'text-[#10B981]'} />
+                        <Zap size={14} className="text-[#10B981]" />
                         <span className="text-xs font-medium text-white/60">Direct Route</span>
                       </div>
                     </div>
@@ -325,11 +287,25 @@ export default function RecommendedRoutes({
                     <div className="flex flex-col gap-3 bg-white/5 p-4 rounded-xl border border-white/10">
                       <div>
                         <div className="text-xs text-white/50 mb-0.5">Departs:</div>
-                        <div className="text-sm font-bold text-white">{formatTime(route.departure_time) || '-'}</div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="text-sm font-bold text-white">{route.departure_display?.display_time || '-'}</div>
+                          {route.departure_display && route.departure_display.day_offset > 0 && (
+                            <span className="text-[10px] font-bold bg-[#FF4500]/20 text-[#FF4500] px-1.5 py-0.5 rounded uppercase tracking-wider">
+                              +{route.departure_display.day_offset} Day
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div>
                         <div className="text-xs text-white/50 mb-0.5">Arrives:</div>
-                        <div className="text-sm font-bold text-white">{formatTime(route.arrival_time) || '-'}</div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="text-sm font-bold text-white">{route.arrival_display?.display_time || '-'}</div>
+                          {route.arrival_display && route.arrival_display.day_offset > 0 && (
+                            <span className="text-[10px] font-bold bg-[#FF4500]/20 text-[#FF4500] px-1.5 py-0.5 rounded uppercase tracking-wider">
+                              +{route.arrival_display.day_offset} Day
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div>
                         <div className="text-xs text-white/50 mb-0.5">Duration:</div>
@@ -357,14 +333,13 @@ export default function RecommendedRoutes({
         })}
       </div>
 
-      {/* NO DIRECT ROUTES BANNER */}
-      {routes.length === 0 && transferRoutes.length > 0 && (
-        <div className="bg-[#FF5A00]/10 border border-[#FF5A00]/20 rounded-xl p-4 flex flex-col gap-1 items-center text-center animate-slide-in-left">
-          <div className="text-lg mb-1 text-[#FF5A00]">🔄</div>
-          <div className="font-semibold text-white">No Direct Routes Available</div>
-          <div className="text-sm text-[#FF5A00]/80">Showing Transfer Options</div>
-        </div>
-      )}
+      {/* NO DIRECT ROUTES BANNER replaced by GlobalAlertModal */}
+      <GlobalAlertModal
+        isOpen={routes.length === 0 && transferRoutes.length > 0 && !hasDismissedWarning}
+        onClose={() => setHasDismissedWarning(true)}
+        title="Routing Update"
+        message="No direct routes are currently available between these locations. We've found the best transfer options for your journey."
+      />
 
       {/* TRANSFER ROUTES SECTION */}
       {routes.length === 0 && transferRoutes.length > 0 && (
@@ -405,8 +380,20 @@ export default function RecommendedRoutes({
                 <div className={`flex flex-col gap-3 ${isSelected ? 'mb-5' : 'mb-4'}`}>
                   {/* Top Row: Badge & Close Button */}
                   <div className="flex items-start justify-between">
-                    <div className={`text-xs px-2 py-1 rounded-md font-semibold shrink-0 ${isSelected ? 'bg-[#10B981]/20 text-[#10B981]' : 'bg-[#FF5A00]/10 text-[#FF5A00]'}`}>
-                      {isSelected ? "✅ Selected Route" : "🔄 1 Transfer Journey"}
+                    <div className="flex items-center gap-2">
+                      <div className={`text-xs px-2 py-1 rounded-md font-semibold shrink-0 ${isSelected ? 'bg-[#10B981]/20 text-[#10B981]' : 'bg-[#FF5A00]/10 text-[#FF5A00]'}`}>
+                        {isSelected ? "✅ Selected Route" : "🔄 1 Transfer"}
+                      </div>
+                      {route.quality && !isSelected && (
+                        <div className={`text-xs px-2 py-1 rounded-md font-semibold shrink-0 ${
+                          route.quality.classification === 'Excellent' ? 'bg-[#10B981]/20 text-[#10B981]' :
+                          route.quality.classification === 'Good' ? 'bg-[#3B82F6]/20 text-[#3B82F6]' :
+                          route.quality.classification === 'Acceptable' ? 'bg-yellow-500/20 text-yellow-400' :
+                          'bg-[#FF4500]/20 text-[#FF4500]'
+                        }`}>
+                          {route.quality.classification === 'Excellent' ? '⭐ Excellent' : route.quality.classification} ({Math.round(route.quality.score)})
+                        </div>
+                      )}
                     </div>
                     {isSelected && (
                       <button 
@@ -434,6 +421,10 @@ export default function RecommendedRoutes({
                         <div className="text-lg font-bold text-white tracking-wide flex items-center gap-2">
                           <span className="truncate">{route.second_leg.destination_stop}</span>
                         </div>
+                        {route.quality?.recommendation_reason && (
+                          <div className="text-xs text-[#3B82F6] mt-0.5 font-medium">{route.quality.recommendation_reason}</div>
+                        )}
+                        <RouteFlags flags={route.quality?.route_flags} />
                       </div>
                       
                       <div className="mt-auto pt-4 border-t border-white/5 grid grid-cols-2 gap-y-2 gap-x-4">
@@ -447,11 +438,25 @@ export default function RecommendedRoutes({
                         </div>
                         <div className="flex flex-col">
                           <span className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">Departure</span>
-                          <span className="text-sm font-bold text-white">{formatTime(route.first_leg.departure_time)}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-bold text-white">{route.first_leg.departure_display?.display_time}</span>
+                            {route.first_leg.departure_display && route.first_leg.departure_display.day_offset > 0 && (
+                              <span className="text-[8px] font-bold bg-[#FF5A00]/20 text-[#FF5A00] px-1 rounded uppercase tracking-wider">
+                                +{route.first_leg.departure_display.day_offset}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div className="flex flex-col">
                           <span className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">Arrival</span>
-                          <span className="text-sm font-bold text-white">{formatTime(route.second_leg.arrival_time)}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-bold text-white">{route.second_leg.arrival_display?.display_time}</span>
+                            {route.second_leg.arrival_display && route.second_leg.arrival_display.day_offset > 0 && (
+                              <span className="text-[8px] font-bold bg-[#FF5A00]/20 text-[#FF5A00] px-1 rounded uppercase tracking-wider">
+                                +{route.second_leg.arrival_display.day_offset}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </>
@@ -471,11 +476,25 @@ export default function RecommendedRoutes({
                       <div className="grid grid-cols-2 gap-3 bg-white/5 p-4 rounded-xl border border-white/10">
                         <div>
                           <div className="text-xs text-white/50 mb-0.5">Departs:</div>
-                          <div className="text-sm font-bold text-white">{formatTime(route.first_leg.departure_time)}</div>
+                          <div className="flex items-center gap-1.5">
+                            <div className="text-sm font-bold text-white">{route.first_leg.departure_display?.display_time}</div>
+                            {route.first_leg.departure_display && route.first_leg.departure_display.day_offset > 0 && (
+                              <span className="text-[8px] font-bold bg-[#FF5A00]/20 text-[#FF5A00] px-1 rounded uppercase tracking-wider">
+                                +{route.first_leg.departure_display.day_offset} Day
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div>
                           <div className="text-xs text-white/50 mb-0.5">Arrives:</div>
-                          <div className="text-sm font-bold text-white">{formatTime(route.second_leg.arrival_time)}</div>
+                          <div className="flex items-center gap-1.5">
+                            <div className="text-sm font-bold text-white">{route.second_leg.arrival_display?.display_time}</div>
+                            {route.second_leg.arrival_display && route.second_leg.arrival_display.day_offset > 0 && (
+                              <span className="text-[8px] font-bold bg-[#FF5A00]/20 text-[#FF5A00] px-1 rounded uppercase tracking-wider">
+                                +{route.second_leg.arrival_display.day_offset} Day
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div>
                           <div className="text-xs text-white/50 mb-0.5">Total Duration:</div>

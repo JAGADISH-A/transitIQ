@@ -1,46 +1,13 @@
 import { ArrowRight, Train, Check } from 'lucide-react';
 
-interface JourneyRoute {
-  feed: string;
-  trip_id: string;
-  route_id: string;
-  route_name: string;
-  source_stop: string;
-  destination_stop: string;
-  stops_between: number;
-  departure_time?: string;
-  arrival_time?: string;
-  duration_minutes?: number;
-}
-
-interface TransferJourney {
-  journey_type: "TRANSFER";
-  transfer_stop: string;
-  first_leg: JourneyRoute;
-  second_leg: JourneyRoute;
-  total_duration: number;
-  transfer_wait: number;
-}
+import { TransferJourney } from '../App';
+import { RouteFlags } from './RouteFlags';
 
 interface TransferRouteCardProps {
   route: TransferJourney;
   isCompareSelected: boolean;
   onCompareToggle: (routeId: string) => void;
   onClick: (route: TransferJourney) => void;
-}
-
-function formatTime(timeString?: string) {
-  if (!timeString) return '';
-  const parts = timeString.split(':');
-  if (parts.length >= 2) {
-    let hours = parseInt(parts[0], 10);
-    const minutes = parts[1];
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    hours = hours % 12;
-    hours = hours ? hours : 12;
-    return `${hours}:${minutes} ${ampm}`;
-  }
-  return timeString;
 }
 
 export default function TransferRouteCard({
@@ -71,6 +38,17 @@ export default function TransferRouteCard({
             <span className="text-[#FF5A00]">🔄</span> 1 Transfer
           </div>
           
+          {route.quality && (
+            <div className={`text-xs px-2 py-1 rounded-full font-semibold border ${
+              route.quality.classification === 'Rejected' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+              route.quality.classification === 'Excellent' ? 'bg-[#10B981]/10 text-[#10B981] border-[#10B981]/20' :
+              route.quality.classification === 'Good' ? 'bg-[#3B82F6]/10 text-[#3B82F6] border-[#3B82F6]/20' :
+              route.quality.classification === 'Acceptable' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
+              'bg-[#FF4500]/10 text-[#FF4500] border-[#FF4500]/20'
+            }`}>
+              {route.quality.classification === 'Excellent' ? '⭐ Excellent' : route.quality.classification} ({Math.round(route.quality.score)})
+            </div>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -95,6 +73,10 @@ export default function TransferRouteCard({
         </div>
       </div>
 
+      <div className="px-1">
+        <RouteFlags flags={route.quality?.route_flags} />
+      </div>
+
       <div className="flex items-start gap-4 mt-2">
         {/* Compact Timeline */}
         <div className="flex flex-col items-center pt-1.5">
@@ -110,7 +92,7 @@ export default function TransferRouteCard({
           <div>
             <div className="flex items-center justify-between">
               <span className="font-medium text-white">{route.first_leg.source_stop}</span>
-              <span className="font-mono">{formatTime(route.first_leg.departure_time)}</span>
+              <span className="font-mono text-white/90">{route.first_leg.departure_display?.display_time || route.first_leg.departure_time}</span>
             </div>
             <div className="text-xs text-white/50 flex items-center gap-2 mt-0.5">
               <Train className="w-3 h-3" /> {route.first_leg.route_name}
@@ -120,7 +102,7 @@ export default function TransferRouteCard({
           <div className="py-1 relative">
             <div className="flex items-center justify-between text-[#FF5A00]/90">
               <span className="font-medium">Arrive {route.transfer_stop}</span>
-              <span className="font-mono">{formatTime(route.first_leg.arrival_time)}</span>
+              <span className="font-mono">{route.first_leg.arrival_display?.display_time || route.first_leg.arrival_time}</span>
             </div>
             <div className="text-xs font-medium tracking-wide mt-1 text-white/60 bg-white/5 px-2 py-1 rounded-md inline-block">
               Wait: {route.transfer_wait} min
@@ -130,7 +112,7 @@ export default function TransferRouteCard({
           <div>
             <div className="flex items-center justify-between">
               <span className="font-medium text-white">Second Departure</span>
-              <span className="font-mono">{formatTime(route.second_leg.departure_time)}</span>
+              <span className="font-mono text-white/90">{route.second_leg.departure_display?.display_time || route.second_leg.departure_time}</span>
             </div>
             <div className="text-xs text-white/50 flex items-center gap-2 mt-0.5">
               <Train className="w-3 h-3" /> {route.second_leg.route_name}
@@ -139,7 +121,7 @@ export default function TransferRouteCard({
 
           <div className="flex items-center justify-between pt-1 border-t border-white/10">
             <span className="font-medium text-white">Arrive {route.second_leg.destination_stop}</span>
-            <span className="font-mono text-white">{formatTime(route.second_leg.arrival_time)}</span>
+            <span className="font-mono text-white/90">{route.second_leg.arrival_display?.display_time || route.second_leg.arrival_time}</span>
           </div>
         </div>
       </div>

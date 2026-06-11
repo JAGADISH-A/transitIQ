@@ -19,18 +19,25 @@ interface TransitMapProps {
   tripStops?: TripStop[];
 }
 
-const BoundsUpdater = ({ bounds }: { bounds: L.LatLngBoundsExpression | null }) => {
+const BoundsUpdater = ({ bounds }: { bounds: L.LatLngBounds | null }) => {
   const map = useMap();
   useEffect(() => {
-    if (bounds) {
-      const targetBounds = L.latLngBounds(bounds as any);
-      const currentBounds = map.getBounds();
+    if (bounds && bounds.isValid()) {
+      // 1. Add ~12% geographical padding to keep the route visually prominent without hugging the edges
+      const targetBounds = bounds.pad(0.12);
       
-      if (currentBounds.contains(targetBounds)) {
-        map.flyTo(targetBounds.getCenter(), map.getZoom(), { duration: 1.5 });
-      } else {
-        map.flyToBounds(bounds, { padding: [60, 60], maxZoom: 12, duration: 1.5 });
-      }
+      // 2. Check the geographic diagonal distance of the bounds (in meters)
+      const diagDistance = targetBounds.getSouthWest().distanceTo(targetBounds.getNorthEast());
+      
+      // 3. Maintain city-level zoom if the route is < 100km, else fall back to a region zoom
+      const appropriateMaxZoom = diagDistance < 100000 ? 14 : 11;
+      
+      // 4. Always fly to bounds to focus on the journey, ignoring previous geographic coverage
+      map.flyToBounds(targetBounds, { 
+        padding: [20, 20], 
+        maxZoom: appropriateMaxZoom, 
+        duration: 1.5 
+      });
     }
   }, [map, bounds]);
   return null;
@@ -197,16 +204,37 @@ export default function TransitMap({
   };
 
   const bounds = useMemo(() => {
-    let allPoints: [number, number][] = [...activePoints];
-    if (viewMode === 'full' && routeShape && routeShape.length > 0) {
-      allPoints = allPoints.concat(routeShape);
+    let allPoints: [number, number][] = [];
+    if (sourcePosition) allPoints.push(sourcePosition);
+    if (destinationPosition) allPoints.push(destinationPosition);
+    if (transferPosition) allPoints.push(transferPosition);
+
+    // Always include the journey's actual curved path in the bounding box
+    if (routeSegments.journey && routeSegments.journey.length > 0) {
+      allPoints = allPoints.concat(routeSegments.journey);
     }
-    if (transferShapes) {
-      if (transferShapes.leg1.length > 0) allPoints = allPoints.concat(transferShapes.leg1);
-      if (transferShapes.leg2.length > 0) allPoints = allPoints.concat(transferShapes.leg2);
+    if (transferSegments.leg1?.journey && transferSegments.leg1.journey.length > 0) {
+      allPoints = allPoints.concat(transferSegments.leg1.journey);
     }
+    if (transferSegments.leg2?.journey && transferSegments.leg2.journey.length > 0) {
+      allPoints = allPoints.concat(transferSegments.leg2.journey);
+    }
+
+    // Include the full un-trimmed shapes only if viewMode requires it
+    if (viewMode === 'full') {
+      if (routeSegments.full && routeSegments.full.length > 0) {
+        allPoints = allPoints.concat(routeSegments.full);
+      }
+      if (transferSegments.leg1?.full && transferSegments.leg1.full.length > 0) {
+        allPoints = allPoints.concat(transferSegments.leg1.full);
+      }
+      if (transferSegments.leg2?.full && transferSegments.leg2.full.length > 0) {
+        allPoints = allPoints.concat(transferSegments.leg2.full);
+      }
+    }
+    
     return allPoints.length > 0 ? L.latLngBounds(allPoints) : null;
-  }, [sourcePosition, destinationPosition, transferPosition, viewMode, routeShape, transferShapes]);
+  }, [sourcePosition, destinationPosition, transferPosition, viewMode, routeSegments, transferSegments]);
 
   return (
     <div className="w-full h-full relative z-0">
