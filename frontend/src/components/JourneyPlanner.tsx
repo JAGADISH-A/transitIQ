@@ -1,20 +1,38 @@
 import { useState } from 'react';
 import { MapPin, Navigation, ArrowDownUp, Clock, Search, Loader2 } from 'lucide-react';
+import WheelTimePicker from './WheelTimePicker';
 
 interface JourneyPlannerProps {
-  onSearch: (source: string, destination: string) => void;
+  onSearch: (source: string, destination: string, departureTime?: string) => void;
   isLoading?: boolean;
   initialSource?: string;
   initialDestination?: string;
+  initialTime?: string;
 }
 
-export default function JourneyPlanner({ onSearch, isLoading = false, initialSource = '', initialDestination = '' }: JourneyPlannerProps) {
+export default function JourneyPlanner({ 
+  onSearch, 
+  isLoading = false, 
+  initialSource = '', 
+  initialDestination = '',
+  initialTime
+}: JourneyPlannerProps) {
   const [source, setSource] = useState(initialSource);
   const [destination, setDestination] = useState(initialDestination);
+  
+  // if initialTime is set, parse it. It's in "HH:MM:SS" format or undefined.
+  const parsedTime = initialTime ? initialTime.slice(0, 5) : '';
+  const [timeMode, setTimeMode] = useState<'now' | 'custom'>(initialTime ? 'custom' : 'now');
+  const [customTime, setCustomTime] = useState<string>(parsedTime);
 
   const handleSearch = () => {
     if (source.trim() && destination.trim()) {
-      onSearch(source, destination);
+      let timeToSend: string | undefined = undefined;
+      if (timeMode === 'custom' && customTime) {
+        // Ensure format HH:MM:SS
+        timeToSend = customTime.length === 5 ? customTime + ":00" : customTime;
+      }
+      onSearch(source, destination, timeToSend);
     }
   };
 
@@ -73,11 +91,34 @@ export default function JourneyPlanner({ onSearch, isLoading = false, initialSou
         </div>
       </div>
 
-      <div className="flex items-center gap-3 mt-2">
-        <button className="flex-1 bg-[#0F0F0F] border border-white/10 rounded-xl px-4 py-3 text-sm flex items-center justify-center gap-2 text-white/70 hover:bg-[#2A2A2A] transition-colors">
-          <Clock size={16} />
-          <span>Leave now</span>
-        </button>
+      <div className="flex flex-col gap-3 mt-2">
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => setTimeMode('now')}
+            className={`flex-1 border rounded-xl px-4 py-3 text-sm flex items-center justify-center gap-2 transition-colors ${timeMode === 'now' ? 'bg-[#FF4500]/10 border-[#FF4500]/50 text-[#FF4500]' : 'bg-[#0F0F0F] border-white/10 text-white/70 hover:bg-[#2A2A2A]'}`}
+          >
+            <Clock size={16} />
+            <span>Leave now</span>
+          </button>
+          <button 
+            onClick={() => setTimeMode('custom')}
+            className={`flex-1 border rounded-xl px-4 py-3 text-sm flex items-center justify-center gap-2 transition-colors ${timeMode === 'custom' ? 'bg-[#FF4500]/10 border-[#FF4500]/50 text-[#FF4500]' : 'bg-[#0F0F0F] border-white/10 text-white/70 hover:bg-[#2A2A2A]'}`}
+          >
+            <Clock size={16} />
+            <span>Custom time</span>
+          </button>
+        </div>
+        
+        {timeMode === 'custom' && (
+          <div className="flex items-center gap-3 relative animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="w-full pt-2">
+              <WheelTimePicker 
+                value={customTime} 
+                onChange={(newTime) => setCustomTime(newTime)} 
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <button 

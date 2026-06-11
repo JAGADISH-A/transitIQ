@@ -1,5 +1,6 @@
-
-import { ArrowDown, Train, Bus, Zap, X, Loader2 } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Train, Bus, Zap, X, Loader2 } from 'lucide-react';
+import FullRouteExplorer from './FullRouteExplorer';
 
 interface JourneyRoute {
   feed: string;
@@ -9,6 +10,23 @@ interface JourneyRoute {
   source_stop: string;
   destination_stop: string;
   stops_between: number;
+  departure_time?: string;
+  arrival_time?: string;
+  duration_minutes?: number;
+}
+
+function formatTime(timeString?: string) {
+  if (!timeString) return null;
+  const parts = timeString.split(':');
+  if (parts.length >= 2) {
+    let hours = parseInt(parts[0], 10);
+    const minutes = parts[1];
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    return `${hours}:${minutes} ${ampm}`;
+  }
+  return timeString;
 }
 
 interface RecommendedRoutesProps {
@@ -16,9 +34,36 @@ interface RecommendedRoutesProps {
   isLoading?: boolean;
   selectedRoute?: JourneyRoute | null;
   onRouteSelect?: (route: JourneyRoute) => void;
+  viewMode?: 'journey' | 'full';
+  onViewModeChange?: (mode: 'journey' | 'full') => void;
+  onViewAll?: () => void;
+  tripStops?: any[];
 }
 
-export default function RecommendedRoutes({ routes = [], isLoading = false, selectedRoute = null, onRouteSelect }: RecommendedRoutesProps) {
+export default function RecommendedRoutes({ 
+  routes = [], 
+  isLoading = false, 
+  selectedRoute = null, 
+  onRouteSelect,
+  viewMode = 'journey',
+  onViewModeChange,
+  onViewAll,
+  tripStops = []
+}: RecommendedRoutesProps) {
+  const [showExplorer, setShowExplorer] = useState(false);
+  const selectedRouteRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (selectedRoute) {
+      setTimeout(() => {
+        selectedRouteRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+      }, 50);
+    }
+  }, [selectedRoute?.trip_id]);
+
   if (isLoading) {
     return (
       <div className="flex flex-col gap-4 mt-2">
@@ -53,14 +98,70 @@ export default function RecommendedRoutes({ routes = [], isLoading = false, sele
     }
   }
 
-  const displayRoutes = uniqueRoutes.slice(0, 3);
+  let displayRoutes = uniqueRoutes.slice(0, 3);
+
+  if (selectedRoute) {
+    const isSelectedInTop3 = displayRoutes.some(r => r.trip_id === selectedRoute.trip_id);
+    if (!isSelectedInTop3) {
+      displayRoutes = [selectedRoute, ...displayRoutes];
+    }
+  }
+
+  const rankByDuration = [...displayRoutes].sort((a,b) => (a.duration_minutes??Infinity) - (b.duration_minutes??Infinity));
+  const rankByArrival = [...displayRoutes].sort((a,b) => (a.arrival_time||'99:99').localeCompare(b.arrival_time||'99:99'));
+  const rankByDeparture = [...displayRoutes].sort((a,b) => (a.departure_time||'99:99').localeCompare(b.departure_time||'99:99'));
+
+  let fastestTripId = rankByDuration[0]?.trip_id || null;
+  let earliestArrivalTripId = rankByArrival[0]?.trip_id || null;
+  let nextDepartureTripId = rankByDeparture[0]?.trip_id || null;
+
+  let bestScore = Infinity;
+  let recommendedTripId: string | null = null;
+
+  displayRoutes.forEach(r => {
+    const dRank = rankByDuration.findIndex(x => x.trip_id === r.trip_id);
+    const aRank = rankByArrival.findIndex(x => x.trip_id === r.trip_id);
+    const depRank = rankByDeparture.findIndex(x => x.trip_id === r.trip_id);
+    const score = dRank + aRank + depRank;
+    if (score < bestScore) {
+      bestScore = score;
+      recommendedTripId = r.trip_id;
+    }
+  });
 
   return (
     <div className="flex flex-col gap-4 mt-2">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium text-white/90">
-          {selectedRoute ? 'Route Details' : 'Recommended Routes'}
-        </h3>
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-medium text-white/90">
+            {selectedRoute ? 'Route Details' : 'Recommended Routes'}
+          </h3>
+        </div>
+        
+        {selectedRoute && (
+          <div className="flex p-1 bg-white/5 rounded-lg border border-white/10 w-fit">
+            <button
+              onClick={() => onViewModeChange?.('journey')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                viewMode === 'journey' 
+                  ? 'bg-white/10 text-white shadow-sm' 
+                  : 'text-white/50 hover:text-white/80'
+              }`}
+            >
+              Journey View
+            </button>
+            <button
+              onClick={() => onViewModeChange?.('full')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                viewMode === 'full' 
+                  ? 'bg-white/10 text-white shadow-sm' 
+                  : 'text-white/50 hover:text-white/80'
+              }`}
+            >
+              Full Route View
+            </button>
+          </div>
+        )}
       </div>
       
       <div className="flex flex-col gap-4 pb-4">
@@ -87,6 +188,7 @@ export default function RecommendedRoutes({ routes = [], isLoading = false, sele
           return (
             <div 
               key={route.trip_id} 
+              ref={isSelected ? selectedRouteRef : null}
               onClick={() => {
                 if (!isSelected) onRouteSelect?.(route);
               }}
@@ -98,22 +200,28 @@ export default function RecommendedRoutes({ routes = [], isLoading = false, sele
             >
               {isSelected && <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#FF4500]" />}
               
-              {/* Route Name */}
-              <div className={`flex items-start justify-between gap-2 ${isSelected ? 'mb-5' : 'mb-4'}`}>
-                <div className="flex items-center gap-2">
-                  <h4 className={`text-lg leading-tight ${isSelected ? 'text-white font-extrabold' : 'text-white/90 font-bold'}`} title={route.route_name}>
-                    {route.route_name}
-                  </h4>
-                  
+              {/* Route Name and Badges */}
+              <div className={`flex flex-col gap-3 ${isSelected ? 'mb-5' : 'mb-4'}`}>
+                {/* Top Row: Badge & Close Button */}
+                <div className="flex items-start justify-between">
                   {(() => {
                     let badgeText = "";
                     let badgeClass = "";
-                    if (index === 0) {
-                      badgeText = "Fastest";
-                      badgeClass = "bg-[#FF4500]/10 text-[#FF4500]";
-                    } else if (index === 1) {
-                      badgeText = "Recommended";
+                    if (isSelected) {
+                      badgeText = "✅ Selected Route";
+                      badgeClass = "bg-[#10B981]/20 text-[#10B981]";
+                    } else if (route.trip_id === recommendedTripId) {
+                      badgeText = "⭐ Recommended";
                       badgeClass = "bg-[#3B82F6]/10 text-[#3B82F6]";
+                    } else if (route.trip_id === earliestArrivalTripId) {
+                      badgeText = "🏆 Earliest Arrival";
+                      badgeClass = "bg-yellow-500/10 text-yellow-400";
+                    } else if (route.trip_id === fastestTripId) {
+                      badgeText = "⚡ Fastest Journey";
+                      badgeClass = "bg-[#FF4500]/10 text-[#FF4500]";
+                    } else if (route.trip_id === nextDepartureTripId) {
+                      badgeText = "🚆 Next Departure";
+                      badgeClass = "bg-indigo-500/10 text-indigo-400";
                     } else {
                       badgeText = "Alternative";
                       badgeClass = "bg-white/10 text-white/70";
@@ -124,59 +232,121 @@ export default function RecommendedRoutes({ routes = [], isLoading = false, sele
                       </div>
                     );
                   })()}
+                  
+                  {isSelected && (
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRouteSelect?.(null as any);
+                      }}
+                      className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-white/60 hover:text-white -mt-1 -mr-1"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
                 </div>
-                {isSelected && (
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRouteSelect?.(null as any);
-                    }}
-                    className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-white/60 hover:text-white"
-                  >
-                    <X size={16} />
-                  </button>
+
+                {/* Content */}
+                {!isSelected ? (
+                  <>
+                    <div className="flex flex-col gap-0.5">
+                      {route.departure_time && (
+                        <div className="text-xl font-bold text-white tracking-wide">
+                          {formatTime(route.departure_time)}
+                        </div>
+                      )}
+                      <h4 className="text-base leading-tight text-white/80 font-medium" title={route.route_name}>
+                        {route.route_name}
+                      </h4>
+                      {(route.arrival_time || route.duration_minutes !== undefined) && (
+                        <div className="flex flex-col gap-0.5 mt-1.5 text-sm font-medium text-white/60">
+                          {route.arrival_time && <div>Arrives {formatTime(route.arrival_time)}</div>}
+                          {route.duration_minutes !== undefined && <div>Duration {route.duration_minutes} min</div>}
+                        </div>
+                      )}
+                    </div>
+                    {/* Bottom Metadata */}
+                    <div className="mt-auto pt-4 border-t border-white/5 flex flex-col gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-medium text-white/70 bg-white/10 px-2.5 py-1 rounded-md">
+                          {route.stops_between} stops
+                        </span>
+                        <span className="text-xs font-medium text-white/70 bg-white/10 px-2.5 py-1 rounded-md capitalize">
+                          {route.feed.toLowerCase()}
+                        </span>
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-white/70 bg-white/10 px-2.5 py-1 rounded-md">
+                          {icon}
+                          <span>{type}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-1.5">
+                        <Zap size={14} className={route.trip_id === fastestTripId ? 'text-[#FF4500]' : 'text-[#10B981]'} />
+                        <span className="text-xs font-medium text-white/60">Direct Route</span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex flex-col gap-5 animate-in fade-in duration-300">
+                    <h4 className="text-lg leading-tight text-white font-bold" title={route.route_name}>
+                      {route.route_name}
+                    </h4>
+                    <div className="flex flex-col gap-3 bg-white/5 p-4 rounded-xl border border-white/10">
+                      <div>
+                        <div className="text-xs text-white/50 mb-0.5">Departs:</div>
+                        <div className="text-sm font-bold text-white">{formatTime(route.departure_time) || '-'}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-white/50 mb-0.5">Arrives:</div>
+                        <div className="text-sm font-bold text-white">{formatTime(route.arrival_time) || '-'}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-white/50 mb-0.5">Duration:</div>
+                        <div className="text-sm font-bold text-white">{route.duration_minutes !== undefined ? `${route.duration_minutes} min` : '-'}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-white/50 mb-0.5">Stops:</div>
+                        <div className="text-sm font-bold text-white">{route.stops_between}</div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowExplorer(true);
+                      }}
+                      className="w-full mt-2 bg-white/10 hover:bg-white/20 text-white font-medium py-2 rounded-xl transition-colors border border-white/10 text-sm"
+                    >
+                      View Full Route
+                    </button>
+                  </div>
                 )}
-              </div>
-              
-              {/* Expanded Details: Stations with Arrow */}
-              {isSelected && (
-                <div className="flex flex-col gap-1.5 mb-6 pl-1 border-l-2 border-white/10 ml-1 animate-in fade-in slide-in-from-top-2 duration-300">
-                  <span className="text-sm font-semibold text-white/80 truncate pl-3 relative before:absolute before:w-2 before:h-2 before:rounded-full before:bg-[#10B981] before:-left-[5px] before:top-1.5" title={route.source_stop}>
-                    {route.source_stop}
-                  </span>
-                  <div className="pl-3 py-1">
-                    <ArrowDown size={14} className="text-white/30" />
-                  </div>
-                  <span className="text-sm font-semibold text-white/80 truncate pl-3 relative before:absolute before:w-2 before:h-2 before:rounded-full before:bg-[#EF4444] before:-left-[5px] before:top-1.5" title={route.destination_stop}>
-                    {route.destination_stop}
-                  </span>
-                </div>
-              )}
-              
-              {/* Bottom Metadata */}
-              <div className="mt-auto pt-4 border-t border-white/5 flex flex-col gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-medium text-white/70 bg-white/10 px-2.5 py-1 rounded-md">
-                    {route.stops_between} stops
-                  </span>
-                  <span className="text-xs font-medium text-white/70 bg-white/10 px-2.5 py-1 rounded-md capitalize">
-                    {route.feed.toLowerCase()}
-                  </span>
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-white/70 bg-white/10 px-2.5 py-1 rounded-md">
-                    {icon}
-                    <span>{type}</span>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-1.5">
-                  <Zap size={14} className={index === 0 ? 'text-[#FF4500]' : 'text-[#10B981]'} />
-                  <span className="text-xs font-medium text-white/60">Direct Route</span>
-                </div>
               </div>
             </div>
           );
         })}
       </div>
+
+      {routes.length > 3 && (
+        <button
+          onClick={onViewAll}
+          className="w-full mb-4 bg-white/5 hover:bg-white/10 text-white/90 font-medium py-3 rounded-xl transition-colors border border-white/10 flex items-center justify-center gap-2"
+        >
+          View All Routes ({routes.length})
+        </button>
+      )}
+      
+      {selectedRoute && (
+        <FullRouteExplorer
+          isOpen={showExplorer}
+          onClose={() => setShowExplorer(false)}
+          feed={selectedRoute.feed}
+          tripId={selectedRoute.trip_id}
+          sourceStopName={selectedRoute.source_stop}
+          destinationStopName={selectedRoute.destination_stop}
+          routeName={selectedRoute.route_name}
+          preloadedStops={tripStops}
+        />
+      )}
     </div>
   );
 }

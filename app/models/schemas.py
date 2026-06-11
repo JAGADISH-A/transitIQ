@@ -1,6 +1,6 @@
 """Pydantic response schemas for the TransitIQ API."""
 
-from enum import Enum, IntEnum
+from enum import IntEnum
 from pydantic import BaseModel
 
 
@@ -12,11 +12,6 @@ class MatchTier(IntEnum):
     PREFIX = 4
     TOKEN = 5
     FUZZY = 6
-
-
-class JourneyType(str, Enum):
-    DIRECT = "DIRECT"
-    TRANSFER = "TRANSFER"
 
 
 class StopResult(BaseModel):
@@ -97,7 +92,6 @@ class TripRoute(BaseModel):
     route_short_name: str
     route_long_name: str
     feed: str
-    shape_id: str | None = None
 
 
 class TransferOption(BaseModel):
@@ -112,24 +106,6 @@ class TransferOption(BaseModel):
     score: float
 
 
-class TripStop(BaseModel):
-    """A stop along a specific trip timeline."""
-
-    stop_id: str
-    stop_name: str
-    stop_sequence: int
-    arrival_time: str | None = None
-    departure_time: str | None = None
-    stop_lat: float | None = None
-    stop_lon: float | None = None
-
-
-class TripStopsResponse(BaseModel):
-    """Response model for fetching all stops on a trip."""
-
-    feed: str
-    trip_id: str
-    stops: list[TripStop]
 class TripResult(BaseModel):
     """Deterministic trip-planning result between a source and destination stop."""
 
@@ -154,35 +130,3 @@ class TripResponse(BaseModel):
     results: list[TripResult]
     feeds_searched: list[str]
 
-
-class JourneyRoute(BaseModel):
-    """A minimal direct route option between two stops."""
-    journey_type: JourneyType = JourneyType.DIRECT
-    feed: str
-    trip_id: str
-    route_id: str
-    route_name: str
-    source_stop: str
-    destination_stop: str
-    stops_between: int
-    departure_time: str | None = None
-    arrival_time: str | None = None
-    duration_minutes: int | None = None
-    shape_id: str | None = None
-
-
-class TransferJourney(BaseModel):
-    """A single-transfer journey between two stops."""
-    journey_type: JourneyType = JourneyType.TRANSFER
-    transfer_stop: str
-    first_leg: JourneyRoute
-    second_leg: JourneyRoute
-    total_duration: int
-    transfer_wait: int
-
-
-class JourneyResponse(BaseModel):
-    """Response containing matching direct routes for a journey."""
-    success: bool
-    routes: list[JourneyRoute]
-    transfer_routes: list[TransferJourney] = []

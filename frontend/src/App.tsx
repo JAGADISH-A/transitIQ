@@ -5,6 +5,7 @@ import JourneyPlanner from './components/JourneyPlanner';
 import TransitMap from './components/map/TransitMap';
 import RecommendedRoutes from './components/RecommendedRoutes';
 import FloatingAIAssistant from './components/FloatingAIAssistant';
+import JourneyExplorer from './components/JourneyExplorer';
 
 interface StopResult {
   stop_id: string;
@@ -27,12 +28,23 @@ interface JourneyRoute {
   source_stop: string;
   destination_stop: string;
   stops_between: number;
+  departure_time?: string;
   shape_id?: string;
 }
 
 interface JourneyResponse {
   success: boolean;
   routes: JourneyRoute[];
+}
+
+export interface TripStop {
+  stop_id: string;
+  stop_name: string;
+  stop_sequence: number;
+  arrival_time?: string;
+  departure_time?: string;
+  stop_lat?: number;
+  stop_lon?: number;
 }
 
 function App() {
@@ -45,12 +57,28 @@ function App() {
   const [journeyRoutes, setJourneyRoutes] = useState<JourneyRoute[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<JourneyRoute | null>(null);
   const [routeShape, setRouteShape] = useState<[number, number][] | null>(null);
+  const [tripStops, setTripStops] = useState<TripStop[]>([]);
+  const [viewMode, setViewMode] = useState<'journey' | 'full'>('journey');
+  const [appView, setAppView] = useState<'planner' | 'explorer'>('planner');
+  const [searchTime, setSearchTime] = useState<string | undefined>(undefined);
 
   const handleRouteSelect = async (route: JourneyRoute | null) => {
     setSelectedRoute(route);
     setRouteShape(null); // Clear previous route shape immediately
+    setTripStops([]); // Clear previous trip stops
 
     if (!route) return; // If null is passed, we just unselect
+
+    // Fetch trip stops
+    try {
+      const stopsRes = await fetch(`http://localhost:8000/trips/${route.feed}/${route.trip_id}/stops`);
+      if (stopsRes.ok) {
+        const data = await stopsRes.json();
+        setTripStops(data.stops || []);
+      }
+    } catch (err) {
+      console.error('Error fetching trip stops:', err);
+    }
 
     if (!route.shape_id) {
       console.warn('No shape_id available for this route.');
@@ -78,7 +106,7 @@ function App() {
     setError(null);
   };
 
-  const handleSearch = async (source: string, destination: string) => {
+  const handleSearch = async (source: string, destination: string, departureTime?: string) => {
     setIsLoading(true);
     setError(null);
     setJourneyRoutes([]);
@@ -121,8 +149,20 @@ function App() {
       setDestinationName(d.stop_name);
 
       // Step 2: Fetch journey routes using the resolved stop IDs
+      let searchTimeString = departureTime;
+      if (!searchTimeString) {
+        const now = new Date();
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        const ss = String(now.getSeconds()).padStart(2, '0');
+        searchTimeString = `${hh}:${mm}:${ss}`;
+      }
+      setSearchTime(searchTimeString);
+
+      console.log(`Searching journeys after ${searchTimeString}`);
+
       const journeyRes = await fetch(
-        `http://localhost:8000/journey?source_stop_id=${encodeURIComponent(s.stop_id)}&destination_stop_id=${encodeURIComponent(d.stop_id)}`
+        `http://localhost:8000/journey?source_stop_id=${encodeURIComponent(s.stop_id)}&destination_stop_id=${encodeURIComponent(d.stop_id)}&departure_after=${encodeURIComponent(searchTimeString)}`
       );
 
       if (journeyRes.ok) {
@@ -146,8 +186,24 @@ function App() {
       <Header />
 
       <main className="flex-1 flex flex-col p-4 md:p-6 gap-6 max-w-[1600px] w-full mx-auto relative">
+        {appView === 'explorer' ? (
+          <div className="absolute inset-0 z-50 bg-[#0F0F0F]">
+            <JourneyExplorer
+              routes={journeyRoutes}
+              sourceName={sourceName || ''}
+              destinationName={destinationName || ''}
+              departureAfter={searchTime}
+              onBack={() => setAppView('planner')}
+              onRouteSelect={(route) => {
+                setAppView('planner');
+                handleRouteSelect(route);
+              }}
+            />
+          </div>
+        ) : null}
+
         {/* 2. Main Area (30% Planner / 70% Map) */}
-        <section className="flex flex-col lg:flex-row gap-6 min-h-[600px] lg:h-[80vh]">
+        <section className={`flex flex-col lg:flex-row gap-6 min-h-[600px] lg:h-[80vh] ${appView === 'explorer' ? 'hidden' : ''}`}>
           {/* Left Panel - 30% Width */}
           <div className="w-full lg:w-[30%] flex flex-col gap-4 overflow-y-auto max-h-[80vh] pr-2 custom-scrollbar">
             {journeyRoutes.length > 0 || isLoading ? (
@@ -164,6 +220,10 @@ function App() {
                   isLoading={isLoading} 
                   selectedRoute={selectedRoute}
                   onRouteSelect={handleRouteSelect}
+                  viewMode={viewMode}
+                  onViewModeChange={setViewMode}
+                  onViewAll={() => setAppView('explorer')}
+                  tripStops={tripStops}
                 />
               </div>
             ) : (
@@ -173,6 +233,7 @@ function App() {
                   isLoading={isLoading} 
                   initialSource={sourceName || ''}
                   initialDestination={destinationName || ''}
+                  initialTime={searchTime}
                 />
                 {error && (
                   <div className="bg-red-500/10 border border-red-500/50 rounded-xl p-4 text-red-500 text-sm">
@@ -191,6 +252,8 @@ function App() {
               sourceName={sourceName}
               destinationName={destinationName}
               routeShape={routeShape}
+              viewMode={viewMode}
+              tripStops={tripStops}
             />
           </div>
         </section>
