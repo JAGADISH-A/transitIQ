@@ -7,9 +7,14 @@ import type { TripStop } from '../../App';
 interface TransitMapProps {
   sourcePosition?: [number, number];
   destinationPosition?: [number, number];
+  transferPosition?: [number, number];
   sourceName?: string;
   destinationName?: string;
+  selectedRoute?: any;
+  selectedTransferRoute?: any;
   routeShape?: [number, number][] | null;
+  transferShapes?: {leg1: [number, number][], leg2: [number, number][]} | null;
+  transferStops?: {leg1: TripStop[], leg2: TripStop[]} | null;
   viewMode?: 'journey' | 'full';
   tripStops?: TripStop[];
 }
@@ -31,7 +36,7 @@ const BoundsUpdater = ({ bounds }: { bounds: L.LatLngBoundsExpression | null }) 
   return null;
 };
 
-const createCustomIcon = (color: string, radius: number = 16) => {
+const createCustomIcon = (color: string, radius: number = 14) => {
   return L.divIcon({
     className: 'custom-marker',
     html: `
@@ -40,8 +45,8 @@ const createCustomIcon = (color: string, radius: number = 16) => {
         width: ${radius}px;
         height: ${radius}px;
         border-radius: 50%;
-        border: 2px solid #1A1A1A;
-        box-shadow: 0 0 10px ${color};
+        border: 2px solid #FFFFFF;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
       "></div>
     `,
     iconSize: [radius, radius],
@@ -52,11 +57,15 @@ const createCustomIcon = (color: string, radius: number = 16) => {
 export default function TransitMap({ 
   sourcePosition, 
   destinationPosition,
+  transferPosition,
   sourceName = "Source",
   destinationName = "Destination",
+  selectedTransferRoute,
   routeShape,
+  transferShapes,
   viewMode = 'journey',
-  tripStops = []
+  tripStops = [],
+  transferStops = null
 }: TransitMapProps) {
   // If neither is provided, center somewhere default (e.g., Chennai)
   const defaultCenter: [number, number] = [13.0827, 80.2707];
@@ -64,6 +73,7 @@ export default function TransitMap({
   const activePoints: [number, number][] = [];
   if (sourcePosition) activePoints.push(sourcePosition);
   if (destinationPosition) activePoints.push(destinationPosition);
+  if (transferPosition) activePoints.push(transferPosition);
 
   const routeSegments = useMemo(() => {
     if (!routeShape || routeShape.length === 0) return { full: null, journey: null };
@@ -90,12 +100,113 @@ export default function TransitMap({
     };
   }, [routeShape, sourcePosition, destinationPosition]);
 
-  const bounds = useMemo(() => {
-    if (viewMode === 'full' && routeShape && routeShape.length > 0) {
-      return L.latLngBounds(routeShape);
+  const transferSegments = useMemo(() => {
+    if (!transferShapes) return { leg1: null, leg2: null };
+
+    const sliceShape = (shape: [number, number][], posA: [number, number], posB: [number, number]) => {
+      if (!shape || shape.length === 0) return { full: null, journey: null };
+      if (!posA || !posB) return { full: shape, journey: shape };
+      
+      let minA = Infinity, idxA = 0;
+      let minB = Infinity, idxB = 0;
+      
+      shape.forEach((pt, idx) => {
+        const dA = Math.pow(pt[0] - posA[0], 2) + Math.pow(pt[1] - posA[1], 2);
+        const dB = Math.pow(pt[0] - posB[0], 2) + Math.pow(pt[1] - posB[1], 2);
+        if (dA < minA) { minA = dA; idxA = idx; }
+        if (dB < minB) { minB = dB; idxB = idx; }
+      });
+      
+      const start = Math.min(idxA, idxB);
+      const end = Math.max(idxA, idxB);
+      
+      return {
+        full: shape,
+        journey: shape.slice(start, end + 1)
+      };
+    };
+
+    const leg1 = transferShapes.leg1 && sourcePosition && transferPosition 
+      ? sliceShape(transferShapes.leg1, sourcePosition, transferPosition) 
+      : { full: transferShapes.leg1, journey: transferShapes.leg1 };
+      
+    const leg2 = transferShapes.leg2 && transferPosition && destinationPosition
+      ? sliceShape(transferShapes.leg2, transferPosition, destinationPosition)
+      : { full: transferShapes.leg2, journey: transferShapes.leg2 };
+
+    return { leg1, leg2 };
+  }, [transferShapes, sourcePosition, transferPosition, destinationPosition]);
+
+  const renderStops = (stops: TripStop[] | undefined, startName: string, endName: string, segmentColor: string = '#F97316') => {
+    if (!stops || stops.length === 0) return null;
+    const safeStart = (startName || '').toLowerCase().trim();
+    const safeEnd = (endName || '').toLowerCase().trim();
+    
+    let startSeq = -1;
+    let endSeq = -1;
+    for (const s of stops) {
+      const sn = (s.stop_name || '').toLowerCase().trim();
+      const si = (s.stop_id || '').toLowerCase().trim();
+      if (sn === safeStart || si === safeStart) startSeq = s.stop_sequence;
+      if (sn === safeEnd || si === safeEnd) endSeq = s.stop_sequence;
     }
-    return activePoints.length > 0 ? L.latLngBounds(activePoints) : null;
-  }, [sourcePosition, destinationPosition, viewMode, routeShape]);
+
+    return stops.map((stop, idx) => {
+      if (!stop.stop_lat || !stop.stop_lon) return null;
+      
+      const safeName = (stop.stop_name || '').toLowerCase().trim();
+      const safeId = (stop.stop_id || '').toLowerCase().trim();
+      
+      const isStart = safeName === safeStart || safeId === safeStart;
+      const isEnd = safeName === safeEnd || safeId === safeEnd;
+      
+      if (isStart || isEnd) return null;
+
+      let isWithinSegment = false;
+      if (startSeq !== -1 && endSeq !== -1) {
+        const minSeq = Math.min(startSeq, endSeq);
+        const maxSeq = Math.max(startSeq, endSeq);
+        isWithinSegment = stop.stop_sequence > minSeq && stop.stop_sequence < maxSeq;
+      }
+
+      if (viewMode !== 'full' && !isWithinSegment) return null;
+
+      const color = isWithinSegment ? segmentColor : '#888888';
+      const radius = isWithinSegment ? 4 : 3;
+
+      return (
+        <CircleMarker
+          key={`${stop.stop_id}-${idx}`}
+          center={[stop.stop_lat, stop.stop_lon]}
+          radius={radius}
+          pathOptions={{
+            fillColor: color,
+            fillOpacity: 1,
+            color: '#1A1A1A',
+            weight: 1
+          }}
+        >
+          <Popup className="transit-popup">
+            <div className="font-sans text-sm font-semibold text-gray-900">
+              {stop.stop_name}
+            </div>
+          </Popup>
+        </CircleMarker>
+      );
+    });
+  };
+
+  const bounds = useMemo(() => {
+    let allPoints: [number, number][] = [...activePoints];
+    if (viewMode === 'full' && routeShape && routeShape.length > 0) {
+      allPoints = allPoints.concat(routeShape);
+    }
+    if (transferShapes) {
+      if (transferShapes.leg1.length > 0) allPoints = allPoints.concat(transferShapes.leg1);
+      if (transferShapes.leg2.length > 0) allPoints = allPoints.concat(transferShapes.leg2);
+    }
+    return allPoints.length > 0 ? L.latLngBounds(allPoints) : null;
+  }, [sourcePosition, destinationPosition, transferPosition, viewMode, routeShape, transferShapes]);
 
   return (
     <div className="w-full h-full relative z-0">
@@ -110,74 +221,37 @@ export default function TransitMap({
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
         
-        {routeSegments.full && (
-          <Polyline positions={routeSegments.full} color="#C0C0C0" weight={4} opacity={0.7} />
+        {routeSegments.full && viewMode === 'full' && (
+          <Polyline positions={routeSegments.full} color="#9CA3AF" weight={3} opacity={0.4} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
         )}
         
         {routeSegments.journey && (
-          <Polyline positions={routeSegments.journey} color="#FF4500" weight={6} opacity={1} />
+          <Polyline positions={routeSegments.journey} color="#F97316" weight={4} opacity={0.9} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
+        )}
+
+        {transferSegments.leg1?.full && viewMode === 'full' && (
+          <Polyline positions={transferSegments.leg1.full} color="#9CA3AF" weight={3} opacity={0.4} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
+        )}
+        {transferSegments.leg1?.journey && (
+          <Polyline positions={transferSegments.leg1.journey} color="#F97316" weight={4} opacity={0.9} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
+        )}
+
+        {transferSegments.leg2?.full && viewMode === 'full' && (
+          <Polyline positions={transferSegments.leg2.full} color="#9CA3AF" weight={3} opacity={0.4} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
+        )}
+        {transferSegments.leg2?.journey && (
+          <Polyline positions={transferSegments.leg2.journey} color="#10B981" weight={4} opacity={0.9} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
         )}
 
         {/* Intermediate Stop Markers */}
-        {tripStops && tripStops.map((stop) => {
-          if (!stop.stop_lat || !stop.stop_lon) return null;
-          
-          const safeSource = (sourceName || '').toLowerCase().trim();
-          const safeDest = (destinationName || '').toLowerCase().trim();
-          const safeName = (stop.stop_name || '').toLowerCase().trim();
-          const safeId = (stop.stop_id || '').toLowerCase().trim();
-          
-          const isSource = safeName === safeSource || safeId === safeSource;
-          const isDest = safeName === safeDest || safeId === safeDest;
-          
-          // Don't render circle markers for source and dest, we use actual Markers for them
-          if (isSource || isDest) return null;
-
-          // Determine if stop is within user segment
-          // We can use routeSegments.journey and min distance to determine, but since we have stop_sequence,
-          // it's easier to find the sequence of source and dest.
-          let sourceSeq = -1;
-          let destSeq = -1;
-          for (const s of tripStops) {
-            const sn = (s.stop_name || '').toLowerCase().trim();
-            const si = (s.stop_id || '').toLowerCase().trim();
-            if (sn === safeSource || si === safeSource) sourceSeq = s.stop_sequence;
-            if (sn === safeDest || si === safeDest) destSeq = s.stop_sequence;
-          }
-
-          let isWithinSegment = false;
-          if (sourceSeq !== -1 && destSeq !== -1) {
-            const minSeq = Math.min(sourceSeq, destSeq);
-            const maxSeq = Math.max(sourceSeq, destSeq);
-            isWithinSegment = stop.stop_sequence > minSeq && stop.stop_sequence < maxSeq;
-          }
-
-          const color = isWithinSegment ? '#FF4500' : '#888888';
-          const radius = isWithinSegment ? 4 : 3;
-          
-          return (
-            <CircleMarker
-              key={stop.stop_id}
-              center={[stop.stop_lat, stop.stop_lon]}
-              radius={radius}
-              pathOptions={{
-                fillColor: color,
-                fillOpacity: 1,
-                color: '#1A1A1A',
-                weight: 1
-              }}
-            >
-              <Popup className="transit-popup">
-                <div className="font-sans text-sm font-semibold text-gray-900">
-                  {stop.stop_name}
-                </div>
-              </Popup>
-            </CircleMarker>
-          );
-        })}
+        {tripStops && tripStops.length > 0 && renderStops(tripStops, sourceName || '', destinationName || '')}
+        
+        {transferStops?.leg1 && transferStops.leg1.length > 0 && renderStops(transferStops.leg1, sourceName || '', selectedTransferRoute?.transfer_stop || '', '#F97316')}
+        
+        {transferStops?.leg2 && transferStops.leg2.length > 0 && renderStops(transferStops.leg2, selectedTransferRoute?.transfer_stop || '', destinationName || '', '#10B981')}
 
         {sourcePosition && (
-          <Marker position={sourcePosition} icon={createCustomIcon('#10B981', 16)}>
+          <Marker position={sourcePosition} icon={createCustomIcon('#097752ff', 16)}>
             <Popup className="transit-popup">
               <div className="font-sans">
                 <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
@@ -206,25 +280,52 @@ export default function TransitMap({
           </Marker>
         )}
 
+        {transferPosition && selectedTransferRoute && (
+          <Marker position={transferPosition} icon={createCustomIcon('#F59E0B', 14)}>
+            <Popup className="transit-popup">
+              <div className="font-sans">
+                <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                  Transfer Station
+                </div>
+                <div className="font-semibold text-gray-900">
+                  {selectedTransferRoute.transfer_stop}
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        )}
+
         {bounds && <BoundsUpdater bounds={bounds} />}
       </MapContainer>
 
       {/* Floating Legend */}
       <div className="absolute top-4 right-4 z-[400] bg-[#111111]/90 backdrop-blur-md border border-white/10 p-3 rounded-xl shadow-2xl text-xs font-medium text-white/80 flex flex-col gap-2 pointer-events-none">
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-[#10B981] shadow-[0_0_5px_#10B981]" />
+          <div className="w-3 h-3 rounded-full bg-[#10B981]" />
           <span>Start</span>
         </div>
+        {transferPosition && (
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-[#F59E0B]" />
+            <span>Transfer</span>
+          </div>
+        )}
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-[#EF4444] shadow-[0_0_5px_#EF4444]" />
+          <div className="w-3 h-3 rounded-full bg-[#EF4444]" />
           <span>Destination</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-[#FF4500]" />
-          <span>Your Segment</span>
+          <div className="w-3 h-3 rounded-full bg-[#F97316]" />
+          <span>{transferPosition ? "First Segment" : "Your Segment"}</span>
         </div>
+        {transferPosition && (
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-[#10B981]" />
+            <span>Second Segment</span>
+          </div>
+        )}
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-[#C0C0C0]" />
+          <div className="w-3 h-3 rounded-full bg-[#9CA3AF] opacity-60" />
           <span>Complete Route</span>
         </div>
       </div>

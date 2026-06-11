@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { ArrowLeft, ArrowRight, Train, Zap, Trophy, BarChart2, Check, X } from 'lucide-react';
+import TransferRouteCard from './TransferRouteCard';
 
 interface JourneyRoute {
   feed: string;
@@ -14,13 +15,24 @@ interface JourneyRoute {
   duration_minutes?: number;
 }
 
+interface TransferJourney {
+  journey_type: "TRANSFER";
+  transfer_stop: string;
+  first_leg: JourneyRoute;
+  second_leg: JourneyRoute;
+  total_duration: number;
+  transfer_wait: number;
+}
+
 interface JourneyExplorerProps {
   routes: JourneyRoute[];
+  transferRoutes?: TransferJourney[];
   sourceName: string;
   destinationName: string;
   departureAfter?: string;
   onBack: () => void;
   onRouteSelect: (route: JourneyRoute) => void;
+  onTransferRouteSelect?: (route: TransferJourney) => void;
 }
 
 function formatTime(timeString?: string) {
@@ -39,25 +51,35 @@ function formatTime(timeString?: string) {
 
 export default function JourneyExplorer({
   routes,
+  transferRoutes = [],
   sourceName,
   destinationName,
   departureAfter,
   onBack,
-  onRouteSelect
+  onRouteSelect,
+  onTransferRouteSelect
 }: JourneyExplorerProps) {
   const [sortBy, setSortBy] = useState<'earliest_departure' | 'earliest_arrival' | 'shortest_duration'>('earliest_departure');
   const [compareRouteIds, setCompareRouteIds] = useState<Set<string>>(new Set());
   const [showComparison, setShowComparison] = useState(false);
 
+  const [showTransfers, setShowTransfers] = useState(true);
+
   const compareRoutes = useMemo(() => {
-    return routes.filter(r => compareRouteIds.has(r.trip_id));
-  }, [routes, compareRouteIds]);
+    const direct = routes.filter(r => compareRouteIds.has(r.trip_id));
+    const transfers = transferRoutes.filter(r => {
+      const id = `transfer-${r.transfer_stop}-${r.first_leg.trip_id}-${r.second_leg.trip_id}`;
+      return compareRouteIds.has(id);
+    });
+    return [...direct, ...transfers] as any[];
+  }, [routes, transferRoutes, compareRouteIds]);
 
   const compFastest = useMemo(() => {
     let min = Infinity;
     compareRoutes.forEach(r => {
-      if (r.duration_minutes !== undefined && r.duration_minutes < min) {
-        min = r.duration_minutes;
+      const dur = r.journey_type === "TRANSFER" ? r.total_duration : r.duration_minutes;
+      if (dur !== undefined && dur < min) {
+        min = dur;
       }
     });
     return min !== Infinity ? min : null;
@@ -65,14 +87,16 @@ export default function JourneyExplorer({
 
   const compEarliestDep = useMemo(() => {
     if (compareRoutes.length === 0) return null;
-    const deps = compareRoutes.filter(r => r.departure_time).sort((a, b) => a.departure_time!.localeCompare(b.departure_time!));
-    return deps[0]?.departure_time;
+    const deps = compareRoutes.map(r => r.journey_type === "TRANSFER" ? r.first_leg.departure_time : r.departure_time).filter(Boolean);
+    if (deps.length === 0) return null;
+    return deps.sort((a, b) => a!.localeCompare(b!))[0];
   }, [compareRoutes]);
 
   const compEarliestArr = useMemo(() => {
     if (compareRoutes.length === 0) return null;
-    const arrs = compareRoutes.filter(r => r.arrival_time).sort((a, b) => a.arrival_time!.localeCompare(b.arrival_time!));
-    return arrs[0]?.arrival_time;
+    const arrs = compareRoutes.map(r => r.journey_type === "TRANSFER" ? r.second_leg.arrival_time : r.arrival_time).filter(Boolean);
+    if (arrs.length === 0) return null;
+    return arrs.sort((a, b) => a!.localeCompare(b!))[0];
   }, [compareRoutes]);
 
   // Deduplicate routes based on route_id/trip_id if needed, but since we want ALL departures, 
@@ -102,9 +126,11 @@ export default function JourneyExplorer({
 
   // Summary Metrics
   const nextDeparture = useMemo(() => {
-    const departures = routes.filter(r => r.departure_time).sort((a, b) => a.departure_time!.localeCompare(b.departure_time!));
-    return departures[0]?.departure_time;
-  }, [routes]);
+    const directDeps = routes.map(r => r.departure_time).filter(Boolean);
+    const transferDeps = transferRoutes.map(r => r.first_leg.departure_time).filter(Boolean);
+    const allDeps = [...directDeps, ...transferDeps] as string[];
+    return allDeps.sort((a, b) => a.localeCompare(b))[0] || null;
+  }, [routes, transferRoutes]);
 
   const fastestDuration = useMemo(() => {
     let min = Infinity;
@@ -113,13 +139,20 @@ export default function JourneyExplorer({
         min = r.duration_minutes;
       }
     });
+    transferRoutes.forEach(r => {
+      if (r.total_duration !== undefined && r.total_duration < min) {
+        min = r.total_duration;
+      }
+    });
     return min !== Infinity ? min : null;
-  }, [routes]);
+  }, [routes, transferRoutes]);
 
   const earliestArrival = useMemo(() => {
-    const arrivals = routes.filter(r => r.arrival_time).sort((a, b) => a.arrival_time!.localeCompare(b.arrival_time!));
-    return arrivals[0]?.arrival_time;
-  }, [routes]);
+    const directArrs = routes.map(r => r.arrival_time).filter(Boolean);
+    const transferArrs = transferRoutes.map(r => r.second_leg.arrival_time).filter(Boolean);
+    const allArrs = [...directArrs, ...transferArrs] as string[];
+    return allArrs.sort((a, b) => a.localeCompare(b))[0] || null;
+  }, [routes, transferRoutes]);
 
   return (
     <div className="flex flex-col h-full bg-[#0F0F0F] text-white relative">
@@ -139,7 +172,7 @@ export default function JourneyExplorer({
               <span>{destinationName}</span>
             </div>
             <div className="text-sm font-medium text-white/50 flex items-center gap-1.5">
-              <span>{routes.length} Routes</span>
+              <span>{routes.length + transferRoutes.length} Options</span>
               {departureAfter && (
                 <>
                   <span className="w-1 h-1 rounded-full bg-white/20" />
@@ -185,7 +218,7 @@ export default function JourneyExplorer({
               <span className="text-[10px] font-semibold text-green-400 uppercase tracking-wider mb-1 flex items-center gap-1">
                 <BarChart2 size={12} /> Options
               </span>
-              <span className="text-lg font-bold text-white">{routes.length}</span>
+              <span className="text-lg font-bold text-white">{routes.length + transferRoutes.length}</span>
             </div>
           </div>
 
@@ -278,6 +311,56 @@ export default function JourneyExplorer({
             })}
           </div>
 
+          {/* Transfer Routes Section */}
+          {transferRoutes && transferRoutes.length > 0 && (
+            <div className="mb-24 flex flex-col gap-4">
+              <button 
+                onClick={() => setShowTransfers(!showTransfers)}
+                className="w-full flex items-center justify-between p-4 bg-[#1A1A1A] border border-white/10 rounded-xl hover:bg-[#222] transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-[#FF5A00] text-xl">🔄</span>
+                  <span className="font-semibold text-white">Transfer Options ({transferRoutes.length})</span>
+                </div>
+                <ArrowRight className={`w-5 h-5 text-white/40 transition-transform duration-300 ${showTransfers ? 'rotate-90' : ''}`} />
+              </button>
+              
+              {showTransfers && (
+                <div className="flex flex-col gap-3">
+                  {transferRoutes.map((tRoute, idx) => {
+                    const id = `transfer-${tRoute.transfer_stop}-${tRoute.first_leg.trip_id}-${tRoute.second_leg.trip_id}`;
+                    const isComparing = compareRouteIds.has(id);
+                    
+                    return (
+                      <TransferRouteCard 
+                        key={idx}
+                        route={tRoute}
+                        isCompareSelected={isComparing}
+                        onCompareToggle={(routeId) => {
+                          const newSet = new Set(compareRouteIds);
+                          if (isComparing) {
+                            newSet.delete(routeId);
+                            if (newSet.size === 0) setShowComparison(false);
+                          } else {
+                            if (newSet.size >= 3) return;
+                            newSet.add(routeId);
+                          }
+                          setCompareRouteIds(newSet);
+                        }}
+                        onClick={() => {
+                          if (onTransferRouteSelect) {
+                            onTransferRouteSelect(tRoute);
+                          }
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+
         </div>
       </div>
 
@@ -311,31 +394,34 @@ export default function JourneyExplorer({
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {compareRoutes.map(route => {
-                      const isCompFastest = route.duration_minutes === compFastest;
-                      const isCompEarliestArr = route.arrival_time === compEarliestArr;
-                      const isCompEarliestDep = route.departure_time === compEarliestDep;
+                      const isTransfer = route.journey_type === "TRANSFER";
+                      const id = isTransfer ? `transfer-${route.transfer_stop}-${route.first_leg.trip_id}-${route.second_leg.trip_id}` : route.trip_id;
+                      
+                      const cFastest = compFastest !== null && (isTransfer ? route.total_duration === compFastest : route.duration_minutes === compFastest);
+                      const cEarliestArr = compEarliestArr !== null && (isTransfer ? route.second_leg.arrival_time === compEarliestArr : route.arrival_time === compEarliestArr);
+                      const cEarliestDep = compEarliestDep !== null && (isTransfer ? route.first_leg.departure_time === compEarliestDep : route.departure_time === compEarliestDep);
                       
                       return (
-                        <tr key={route.trip_id} className="text-white group">
+                        <tr key={id} className="text-white group">
                           <td className="py-2 pr-4 font-medium text-white/90 text-xs">
-                            {route.route_name}
+                            {isTransfer ? `🔄 via ${route.transfer_stop}` : route.route_name}
                           </td>
                           <td className="py-2 pr-4">
                             <div className="flex items-center gap-1">
-                              <span className="font-bold">{formatTime(route.departure_time)}</span>
-                              {isCompEarliestDep && <span className="text-[9px] text-blue-400 font-bold uppercase">Best</span>}
+                              <span className="font-bold">{formatTime(isTransfer ? route.first_leg.departure_time : route.departure_time)}</span>
+                              {cEarliestDep && <span className="text-[9px] text-blue-400 font-bold uppercase">Best</span>}
                             </div>
                           </td>
                           <td className="py-2 pr-4">
                             <div className="flex items-center gap-1">
-                              <span className="font-bold text-white/80">{formatTime(route.arrival_time)}</span>
-                              {isCompEarliestArr && <span className="text-[9px] text-yellow-400 font-bold uppercase">Best</span>}
+                              <span className="font-bold text-white/80">{formatTime(isTransfer ? route.second_leg.arrival_time : route.arrival_time)}</span>
+                              {cEarliestArr && <span className="text-[9px] text-yellow-400 font-bold uppercase">Best</span>}
                             </div>
                           </td>
-                          <td className="py-2">
-                            <div className="flex items-center gap-1">
-                              <span className="font-bold text-[#FF4500]">{route.duration_minutes}m</span>
-                              {isCompFastest && <span className="text-[9px] text-[#FF4500] font-bold uppercase">Best</span>}
+                          <td className="py-2 pr-4">
+                            <div className="flex items-center gap-1 text-[#FF4500] font-bold">
+                              {isTransfer ? route.total_duration : route.duration_minutes} min
+                              {cFastest && <Zap size={12} />}
                             </div>
                           </td>
                         </tr>

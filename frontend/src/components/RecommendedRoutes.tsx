@@ -31,9 +31,12 @@ function formatTime(timeString?: string) {
 
 interface RecommendedRoutesProps {
   routes?: JourneyRoute[];
+  transferRoutes?: any[];
   isLoading?: boolean;
   selectedRoute?: JourneyRoute | null;
+  selectedTransferRoute?: any | null;
   onRouteSelect?: (route: JourneyRoute) => void;
+  onTransferRouteSelect?: (route: any) => void;
   viewMode?: 'journey' | 'full';
   onViewModeChange?: (mode: 'journey' | 'full') => void;
   onViewAll?: () => void;
@@ -42,9 +45,12 @@ interface RecommendedRoutesProps {
 
 export default function RecommendedRoutes({ 
   routes = [], 
+  transferRoutes = [],
   isLoading = false, 
   selectedRoute = null, 
+  selectedTransferRoute = null,
   onRouteSelect,
+  onTransferRouteSelect,
   viewMode = 'journey',
   onViewModeChange,
   onViewAll,
@@ -75,7 +81,7 @@ export default function RecommendedRoutes({
     );
   }
 
-  if (routes.length === 0) {
+  if (routes.length === 0 && transferRoutes.length === 0) {
     return (
       <div className="flex flex-col gap-4 mt-2">
         <h3 className="text-lg font-medium text-white/90">Recommended Routes</h3>
@@ -107,6 +113,31 @@ export default function RecommendedRoutes({
     }
   }
 
+  const sortedTransfers = [...transferRoutes].sort((a, b) => {
+    // 1. Earliest Arrival
+    const arrA = a.second_leg.arrival_time || '99:99';
+    const arrB = b.second_leg.arrival_time || '99:99';
+    if (arrA !== arrB) return arrA.localeCompare(arrB);
+    
+    // 2. Lowest Transfer Wait
+    if (a.transfer_wait !== b.transfer_wait) return a.transfer_wait - b.transfer_wait;
+    
+    // 3. Shortest Duration
+    return a.total_duration - b.total_duration;
+  });
+  
+  let displayTransfers = sortedTransfers.slice(0, 3);
+
+  if (selectedTransferRoute) {
+    const isSelectedInTop3 = displayTransfers.some(
+      r => r.first_leg.trip_id === selectedTransferRoute.first_leg.trip_id &&
+           r.second_leg.trip_id === selectedTransferRoute.second_leg.trip_id
+    );
+    if (!isSelectedInTop3) {
+      displayTransfers = [selectedTransferRoute, ...displayTransfers];
+    }
+  }
+
   const rankByDuration = [...displayRoutes].sort((a,b) => (a.duration_minutes??Infinity) - (b.duration_minutes??Infinity));
   const rankByArrival = [...displayRoutes].sort((a,b) => (a.arrival_time||'99:99').localeCompare(b.arrival_time||'99:99'));
   const rankByDeparture = [...displayRoutes].sort((a,b) => (a.departure_time||'99:99').localeCompare(b.departure_time||'99:99'));
@@ -134,7 +165,7 @@ export default function RecommendedRoutes({
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-medium text-white/90">
-            {selectedRoute ? 'Route Details' : 'Recommended Routes'}
+            {selectedRoute || selectedTransferRoute ? 'Route Details' : 'Recommended Routes'}
           </h3>
         </div>
         
@@ -325,6 +356,155 @@ export default function RecommendedRoutes({
           );
         })}
       </div>
+
+      {/* NO DIRECT ROUTES BANNER */}
+      {routes.length === 0 && transferRoutes.length > 0 && (
+        <div className="bg-[#FF5A00]/10 border border-[#FF5A00]/20 rounded-xl p-4 flex flex-col gap-1 items-center text-center animate-slide-in-left">
+          <div className="text-lg mb-1 text-[#FF5A00]">🔄</div>
+          <div className="font-semibold text-white">No Direct Routes Available</div>
+          <div className="text-sm text-[#FF5A00]/80">Showing Transfer Options</div>
+        </div>
+      )}
+
+      {/* TRANSFER ROUTES SECTION */}
+      {routes.length === 0 && transferRoutes.length > 0 && (
+        <div className="flex flex-col gap-4 pb-4">
+          <h3 className="text-lg font-medium text-white/90 mt-2 flex items-center gap-2">
+            🔄 Transfer Options ({transferRoutes.length})
+          </h3>
+          {displayTransfers.map((route, index) => {
+            const isSelected = selectedTransferRoute && 
+              selectedTransferRoute.first_leg.trip_id === route.first_leg.trip_id &&
+              selectedTransferRoute.second_leg.trip_id === route.second_leg.trip_id;
+            const isAnotherSelected = (selectedRoute || selectedTransferRoute) && !isSelected;
+
+            const baseClasses = "relative flex flex-col p-5 rounded-2xl border group transition-all duration-300 animate-slide-in-left overflow-hidden";
+            let stateClasses = "";
+            if (isSelected) {
+              stateClasses = "border-white/10 bg-[#222222] shadow-[0_0_20px_rgba(255,90,0,0.1)] cursor-default";
+            } else if (isAnotherSelected) {
+              stateClasses = "border-white/5 bg-[#1A1A1A] opacity-60 hover:opacity-100 hover:bg-[#222222] cursor-pointer";
+            } else {
+              stateClasses = "border-white/10 bg-[#1A1A1A] hover:bg-[#222222] cursor-pointer";
+            }
+
+            return (
+              <div 
+                key={`transfer-${index}`}
+                onClick={() => {
+                  if (!isSelected) {
+                    onRouteSelect?.(null as any);
+                    onTransferRouteSelect?.(route);
+                  }
+                }}
+                className={`${baseClasses} ${stateClasses}`}
+                style={{ zIndex: isSelected ? 50 : 10 - index, animationDelay: `${index * 100}ms` }}
+              >
+                {isSelected && <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#FF5A00]" />}
+                
+                <div className={`flex flex-col gap-3 ${isSelected ? 'mb-5' : 'mb-4'}`}>
+                  {/* Top Row: Badge & Close Button */}
+                  <div className="flex items-start justify-between">
+                    <div className={`text-xs px-2 py-1 rounded-md font-semibold shrink-0 ${isSelected ? 'bg-[#10B981]/20 text-[#10B981]' : 'bg-[#FF5A00]/10 text-[#FF5A00]'}`}>
+                      {isSelected ? "✅ Selected Route" : "🔄 1 Transfer Journey"}
+                    </div>
+                    {isSelected && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onTransferRouteSelect?.(null as any);
+                        }}
+                        className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-white/60 hover:text-white -mt-1 -mr-1"
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* Content */}
+                  {!isSelected ? (
+                    <>
+                      <div className="flex flex-col gap-0.5">
+                        <div className="text-lg font-bold text-white tracking-wide flex items-center gap-2">
+                          <span className="truncate">{route.first_leg.source_stop}</span>
+                        </div>
+                        <div className="text-[#FF5A00] font-medium text-sm my-0.5 flex items-center gap-1.5">
+                          <span>↓</span> Transfer at {route.transfer_stop}
+                        </div>
+                        <div className="text-lg font-bold text-white tracking-wide flex items-center gap-2">
+                          <span className="truncate">{route.second_leg.destination_stop}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-auto pt-4 border-t border-white/5 grid grid-cols-2 gap-y-2 gap-x-4">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">Total Duration</span>
+                          <span className="text-sm font-bold text-white">{route.total_duration} min</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">Transfer Wait</span>
+                          <span className="text-sm font-bold text-white">{route.transfer_wait} min</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">Departure</span>
+                          <span className="text-sm font-bold text-white">{formatTime(route.first_leg.departure_time)}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-white/40 uppercase tracking-wider font-semibold">Arrival</span>
+                          <span className="text-sm font-bold text-white">{formatTime(route.second_leg.arrival_time)}</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col gap-5 animate-in fade-in duration-300">
+                      <div className="flex flex-col gap-2">
+                        <h4 className="text-base leading-tight text-white font-bold truncate">
+                          {route.first_leg.source_stop}
+                        </h4>
+                        <div className="text-[#FF5A00] text-sm flex items-center gap-2 font-medium">
+                          <span>↓</span> Transfer at {route.transfer_stop}
+                        </div>
+                        <h4 className="text-base leading-tight text-white font-bold truncate">
+                          {route.second_leg.destination_stop}
+                        </h4>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 bg-white/5 p-4 rounded-xl border border-white/10">
+                        <div>
+                          <div className="text-xs text-white/50 mb-0.5">Departs:</div>
+                          <div className="text-sm font-bold text-white">{formatTime(route.first_leg.departure_time)}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-white/50 mb-0.5">Arrives:</div>
+                          <div className="text-sm font-bold text-white">{formatTime(route.second_leg.arrival_time)}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-white/50 mb-0.5">Total Duration:</div>
+                          <div className="text-sm font-bold text-white">{route.total_duration} min</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-white/50 mb-0.5">Transfer Wait:</div>
+                          <div className="text-sm font-bold text-white">{route.transfer_wait} min</div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // No-op for now, per user "Do NOT modify map rendering yet"
+                        }}
+                        className="w-full mt-2 bg-white/10 hover:bg-white/20 text-white font-medium py-2 rounded-xl transition-colors border border-white/10 text-sm opacity-50 cursor-not-allowed"
+                        disabled
+                      >
+                        Full Route View (Direct Only)
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
 
       {routes.length > 3 && (
         <button
