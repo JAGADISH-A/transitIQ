@@ -1,5 +1,7 @@
 import type { NormalizedRoute } from '../types/transit';
 import type { RouteRecommendation } from './types';
+import { generateTravelAdvice } from './travelAdvisor';
+import { analyzeTransferRisk } from './transferRiskAnalyzer';
 
 export function recommendBestRoute(routes: NormalizedRoute[]): RouteRecommendation | null {
   if (!routes || routes.length === 0) return null;
@@ -100,11 +102,16 @@ export function recommendBestRoute(routes: NormalizedRoute[]): RouteRecommendati
     uniqueReasons.unshift("Direct connection");
   }
 
+  const advice = generateTravelAdvice(best.route, routes);
+  const transferRisk = analyzeTransferRisk(best.route);
+
   return {
     recommendedRouteId: best.route.id,
-    title,
-    summary,
+    title: advice.headline,
+    summary: advice.message,
     reasons: uniqueReasons.length > 0 ? uniqueReasons : ["Provides the most balanced travel experience"],
-    confidence
+    confidence,
+    advice,
+    transferRisk
   };
 }

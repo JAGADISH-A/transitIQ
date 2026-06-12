@@ -3,7 +3,7 @@ import { Sparkles, X, Send, Loader2, Train, AlertTriangle, Clock, MapPin, ArrowR
 
 import type { JourneyNarrative, JourneyContext, JourneyRoute, NormalizedRoute, TransferJourney } from '../types/transit';
 import type { RouteRecommendation } from '../ai/types';
-import { recommendBestRoute } from '../ai/journeyIntelligence';
+import { recommendBestRoute, analyzeTransferRisk } from '../ai/journeyIntelligence';
 
 type MessageType = 'text' | 'searching' | 'result' | 'error' | 'not-found';
 
@@ -96,9 +96,12 @@ const AssistantCard = React.memo(({ msg, onRouteSelect }: { msg: Message, onRout
             <div className="bg-[#111] border border-[#252525] shadow-lg rounded-xl p-5 w-full flex flex-col md:flex-row gap-5 items-start justify-between">
               
               <div className="flex flex-col gap-3 flex-1 w-full">
+                <h3 className="text-[13px] font-bold text-[#FF4500] flex items-center gap-2 mb-1 uppercase tracking-wide">
+                  🧠 TransitIQ Recommendation
+                </h3>
                 <div className="flex items-center gap-2">
-                  <h4 className="text-[16px] font-bold text-white flex items-center gap-1.5">
-                    🔥 {msg.recommendation.title}
+                  <h4 className="text-[18px] font-bold text-white flex items-center gap-1.5">
+                    {msg.recommendation.advice?.headline || msg.recommendation.title}
                   </h4>
                   <div className={`ml-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide shrink-0
                     ${msg.recommendation.confidence === 'high' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 
@@ -109,29 +112,18 @@ const AssistantCard = React.memo(({ msg, onRouteSelect }: { msg: Message, onRout
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-[13px] text-[#ccc]">
-                  <div className="flex items-center gap-1.5">
-                    <Train size={14} className="text-zinc-500" />
-                    <span className="font-medium text-white">{msg.recommendedRoute.isTransfer ? 'Multiple Services' : (msg.recommendedRoute.originalData as JourneyRoute).route_name || 'Direct Service'}</span>
+                {msg.recommendation.advice && (
+                  <div className="text-[14px] text-[#e0e0e0] leading-relaxed whitespace-pre-wrap my-2">
+                    {msg.recommendation.advice.message}
                   </div>
-                  <div className="hidden sm:block w-1 h-1 rounded-full bg-zinc-700" />
-                  <div className="flex items-center gap-1.5">
-                    <Clock size={14} className="text-zinc-500" />
-                    <span>{formatDuration(msg.recommendedRoute.durationMinutes)}</span>
-                  </div>
-                  <div className="hidden sm:block w-1 h-1 rounded-full bg-zinc-700" />
-                  <div className="flex items-center gap-1.5">
-                    <ArrowRight size={14} className="text-zinc-500" />
-                    <span>{msg.recommendedRoute.transferCount === 0 ? 'Direct' : `${msg.recommendedRoute.transferCount} Transfer`}</span>
-                  </div>
-                </div>
+                )}
 
-                <div className="mt-2 bg-[#1a1a1a] border border-[#252525] rounded-lg p-3">
-                  <p className="text-[13px] text-[#d0d0d0] font-medium mb-2">Why this route?</p>
-                  <ul className="flex flex-col gap-1.5 text-[13px] text-[#aaa]">
+                <div className="mt-2 bg-[#1a1a1a] border border-[#252525] rounded-lg p-4">
+                  <p className="text-[13px] text-[#d0d0d0] font-medium mb-3">Why TransitIQ likes this route:</p>
+                  <ul className="flex flex-col gap-2 text-[13px] text-[#aaa]">
                     {msg.recommendation.reasons.map((r, i) => (
                       <li key={i} className="flex items-start gap-2">
-                        <span className="text-green-500 mt-0.5 font-bold">✓</span>
+                        <span className="text-green-500 font-bold">✓</span>
                         <span>{r}</span>
                       </li>
                     ))}
@@ -286,11 +278,9 @@ const ContextPanel = ({ route, recommendation }: { route: NormalizedRoute | null
   // Calculate Quality / Risk
   const qualityScore = route.qualityScore || 0;
   const qualityPct = Math.max(0, 100 - (qualityScore * 10)); // rough estimate
-  let riskLevel = 'Low';
-  if (isTransfer) {
-    if (route.transferWait! > 60) riskLevel = 'High';
-    else if (route.transferWait! > 30) riskLevel = 'Medium';
-  }
+  
+  const risk = recommendation?.transferRisk || analyzeTransferRisk(route);
+  let riskLevel = risk.level === 'low' ? 'Low' : risk.level === 'medium' ? 'Medium' : 'High';
 
   const trainLabel = isTransfer ? 'Multiple Services' : (originalData as JourneyRoute).route_name || 'Direct Service';
 
@@ -366,32 +356,66 @@ const ContextPanel = ({ route, recommendation }: { route: NormalizedRoute | null
         </div>
 
         {/* Insight Card */}
-        {recommendation ? (
-          <div className="bg-[#111] border border-[#222] rounded-lg p-4">
-            <h4 className="text-[13px] font-semibold text-white mb-2 flex items-center gap-1.5">
-              🧠 TransitIQ Insight
+        {recommendation?.advice ? (
+          <div className="bg-[#111] border border-[#222] rounded-lg p-5">
+            <h4 className="text-[13px] font-bold text-[#FF4500] uppercase tracking-wide mb-3 flex items-center gap-1.5">
+              Travel Advisor
             </h4>
-            <p className="text-[13px] text-[#aaa] mb-3">This route is recommended because:</p>
-            <ul className="flex flex-col gap-2 text-[12px] text-[#ccc]">
-              {recommendation.reasons.map((r, i) => (
-                <li key={i} className="flex gap-2">
-                  <span className="text-green-500">✓</span>
-                  <span>{r}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          route.transferWait && route.transferWait > 60 && (
-            <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
-              <h4 className="text-[13px] font-semibold text-red-400 mb-2 flex items-center gap-1.5">
-                <AlertTriangle size={14} /> Travel Advisory
-              </h4>
-              <p className="text-[12px] text-red-300/80">
-                {route.transferWait} minute transfer wait at {route.transferStopName}. Consider alternative departures.
-              </p>
+            <h5 className="text-[15px] font-bold text-white mb-2">{recommendation.advice.headline}</h5>
+            <div className="text-[13px] text-[#d0d0d0] leading-relaxed whitespace-pre-wrap mb-4">
+              {recommendation.advice.message}
             </div>
-          )
+            
+            <div className="pt-4 border-t border-[#222]">
+              <p className="text-[11px] text-[#888] font-bold mb-3 uppercase tracking-wider">Key Reasons</p>
+              <ul className="flex flex-col gap-2 text-[12px] text-[#ccc]">
+                {recommendation.reasons.map((r, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="text-green-500 font-bold mt-0.5">✓</span>
+                    <span>{r}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Transfer Intelligence Card */}
+        {risk && (
+          <div className="bg-[#111] border border-[#222] rounded-lg p-5">
+            <h4 className="text-[13px] font-bold text-white uppercase tracking-wide mb-3 flex items-center gap-1.5">
+              Transfer Intelligence
+            </h4>
+            <h5 className="text-[15px] font-bold text-white mb-3">{risk.title}</h5>
+            
+            <div className="mb-4 bg-[#1a1a1a] p-3 rounded-lg border border-[#252525]">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-[12px] text-[#888] uppercase tracking-wider font-semibold">Risk Score</span>
+                <span className="text-[13px] font-bold text-white">{risk.score} / 100</span>
+              </div>
+              <div className="w-full bg-[#222] rounded-full h-1.5">
+                <div 
+                  className={`h-1.5 rounded-full ${risk.level === 'low' ? 'bg-green-500' : risk.level === 'medium' ? 'bg-amber-500' : 'bg-red-500'}`} 
+                  style={{ width: `${risk.score}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="text-[13px] text-[#d0d0d0] leading-relaxed whitespace-pre-wrap">
+              {risk.message}
+            </div>
+
+            {risk.recommendations && risk.recommendations.length > 0 && (
+               <div className="mt-4 flex flex-col gap-2 border-t border-[#222] pt-4">
+                 {risk.recommendations.map((r, i) => (
+                    <div key={i} className="flex gap-2 items-start text-[12px] text-[#aaa]">
+                       <span className="text-amber-500 font-bold mt-0.5">!</span>
+                       <span>{r}</span>
+                    </div>
+                 ))}
+               </div>
+            )}
+          </div>
         )}
 
         {/* Quick Stats */}

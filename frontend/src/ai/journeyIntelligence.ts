@@ -9,3 +9,4 @@ export function analyzeJourney(route: NormalizedRoute): JourneyInsight {
 }
 
 export { recommendBestRoute } from './routeAdvisor';
+export { analyzeTransferRisk } from './transferRiskAnalyzer';
