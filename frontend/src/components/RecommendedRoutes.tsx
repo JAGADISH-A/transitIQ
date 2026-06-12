@@ -1,7 +1,7 @@
 import { Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { NormalizedRoute } from '../types/transit';
-import { RoutePreview } from './RoutePreview';
+import { RouteCard } from './RouteCard';
 import { RouteDetail } from './RouteDetail';
 
 interface RecommendedRoutesProps {
@@ -87,7 +87,7 @@ export default function RecommendedRoutes({
             {sortedRoutes.length > 0 && (
               <div className="flex flex-col gap-3">
                 <h3 className="text-sm font-medium text-zinc-400">Recommended For You</h3>
-                <RoutePreview 
+                <RouteCard 
                   route={sortedRoutes[0]}
                   isHero={true}
                   onClick={() => onRouteSelect?.(sortedRoutes[0])}
@@ -102,7 +102,7 @@ export default function RecommendedRoutes({
                 <div className="flex flex-col gap-2">
                   {displayRoutes.slice(1).map(route => {
                     return (
-                      <RoutePreview 
+                      <RouteCard 
                         key={route.id}
                         route={route}
                         onClick={() => onRouteSelect?.(route)}

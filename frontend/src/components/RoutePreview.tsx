@@ -1,5 +1,6 @@
 import React from 'react';
-import type { NormalizedRoute } from '../types/transit';
+import type { NormalizedRoute, JourneyRoute, TransferJourney } from '../types/transit';
+import { TrainFront, Bus, TramFront, ArrowRight } from 'lucide-react';
 
 interface RoutePreviewProps {
   route: NormalizedRoute;
@@ -10,7 +11,37 @@ interface RoutePreviewProps {
   onCompareToggle?: (e: React.MouseEvent) => void;
 }
 
-export const RoutePreview: React.FC<RoutePreviewProps> = ({ route, onClick, isSelected, isHero = false, isCompared = false, onCompareToggle }) => {
+const MODE_MAP: Record<string, string> = {
+  railways: "Rail",
+  chennai_metro: "Metro",
+  metro: "Metro",
+  mtc: "Bus",
+  bus: "Bus"
+};
+
+const getModeIcon = (mode: string) => {
+  switch (mode) {
+    case 'Rail': return <TrainFront size={16} />;
+    case 'Metro': return <TramFront size={16} />;
+    case 'Bus': return <Bus size={16} />;
+    default: return <TrainFront size={16} />;
+  }
+};
+
+const toTitleCase = (str: string) => {
+  return str.replace(
+    /\w\S*/g,
+    (txt) => txt.charAt(0).toUpperCase() + txt.substring(1).toLowerCase()
+  );
+};
+
+export const RoutePreview: React.FC<RoutePreviewProps> = ({ 
+  route, 
+  onClick, 
+  isSelected, 
+  isCompared = false, 
+  onCompareToggle 
+}) => {
   if (!route) return null;
 
   const {
@@ -20,7 +51,8 @@ export const RoutePreview: React.FC<RoutePreviewProps> = ({ route, onClick, isSe
     arrivalDisplay,
     durationMinutes,
     transferCount,
-    originalData
+    originalData,
+    isTransfer
   } = route;
 
   const formatDuration = (mins: number) => {
@@ -31,26 +63,45 @@ export const RoutePreview: React.FC<RoutePreviewProps> = ({ route, onClick, isSe
   };
 
   const formattedDuration = formatDuration(durationMinutes);
-
   const quality = (originalData as any).quality;
   const recommendation = quality?.recommendation_reason;
   const showRecommendation = recommendation && recommendation !== "Standard Route";
 
+  // Determine Modes used
+  const modes: string[] = [];
+  let trainLabel = '';
+  
+  if (isTransfer) {
+    const t = originalData as TransferJourney;
+    const mode1 = MODE_MAP[t.first_leg.feed] || 'Rail';
+    const mode2 = MODE_MAP[t.second_leg.feed] || 'Rail';
+    if (!modes.includes(mode1)) modes.push(mode1);
+    if (!modes.includes(mode2)) modes.push(mode2);
+    trainLabel = 'Multiple';
+  } else {
+    const t = originalData as JourneyRoute;
+    const mode = MODE_MAP[t.feed] || 'Rail';
+    modes.push(mode);
+    const name = t.route_name;
+    const id = t.route_id;
+    if (name && id && name !== id) trainLabel = `${toTitleCase(name)} (${id})`;
+    else if (name && name === id) trainLabel = `Train No. ${id}`;
+    else if (name) trainLabel = toTitleCase(name);
+    else if (id) trainLabel = `Train No. ${id}`;
+  }
+
   return (
-    <div className={`relative w-full rounded-[20px] transition-all duration-200 overflow-hidden ${
-      isHero 
-        ? 'p-5 bg-zinc-900 border border-zinc-700/50 shadow-md' 
-        : 'bg-white/[0.02] border backdrop-blur-md hover:-translate-y-1 hover:shadow-lg ' + 
-          (isCompared 
-            ? 'border-[#FF4500]/50 shadow-[0_8px_30px_rgba(255,69,0,0.15)]' 
-            : 'border-white/10 hover:border-white/20')
-    } ${isSelected && !isHero ? 'bg-zinc-900 border-zinc-700' : ''}`}>
+    <div className={`relative w-full rounded-2xl transition-all duration-200 group ${
+      isCompared 
+        ? 'bg-zinc-900 border border-[#FF4500]/50 shadow-[0_4px_20px_rgba(255,69,0,0.15)] z-10' 
+        : 'bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] hover:border-white/10 hover:-translate-y-[2px] hover:shadow-lg'
+    } ${isSelected ? 'ring-2 ring-[#FF4500]/50' : ''}`}>
       
-      {/* Compare Checkbox for Explorer Mode */}
+      {/* Compare Checkbox */}
       {onCompareToggle && (
         <button 
           onClick={onCompareToggle}
-          className={`absolute top-4 right-4 w-6 h-6 rounded-full border flex items-center justify-center transition-colors z-10 ${
+          className={`absolute top-1/2 -translate-y-1/2 left-4 w-6 h-6 rounded-full border flex items-center justify-center transition-colors z-20 ${
             isCompared 
               ? 'bg-[#FF4500] border-[#FF4500] text-white' 
               : 'border-white/20 hover:border-white/40 text-transparent hover:text-white/20'
@@ -64,68 +115,77 @@ export const RoutePreview: React.FC<RoutePreviewProps> = ({ route, onClick, isSe
 
       <button
         onClick={onClick}
-        className="w-full text-left p-4 cursor-pointer"
+        className="w-full text-left p-4 pl-14 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer"
       >
-      {isHero && (
-        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#FF4500]/80 to-[#FF4500]/20" />
-      )}
-      {/* Time Row */}
-      <div className={`flex items-center gap-3 mb-1 ${isHero ? 'mb-2' : ''}`}>
-        <span className="text-lg font-medium text-white">
-          {departureDisplay?.display_time || '-'}
-        </span>
-        <span className="text-zinc-500">→</span>
-        <span className="text-lg font-medium text-white">
-          {arrivalDisplay?.display_time || '-'}
-        </span>
         
-        {/* Next Day Indication */}
-        {(arrivalDisplay?.day_offset || 0) > 0 && (
-          <span className="text-[10px] text-zinc-500 bg-zinc-800/50 px-2 py-0.5 rounded-full">
-            +{arrivalDisplay?.day_offset}d
-          </span>
-        )}
-      </div>
+        {/* Left Section: Time & Modes */}
+        <div className="flex items-center gap-6 md:w-1/3">
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2">
+              <span className="text-xl font-bold text-white tracking-tight">
+                {departureDisplay?.display_time || '-'}
+              </span>
+              <span className="text-zinc-500">→</span>
+              <span className="text-xl font-bold text-white tracking-tight">
+                {arrivalDisplay?.display_time || '-'}
+              </span>
+              {(arrivalDisplay?.day_offset || 0) > 0 && (
+                <span className="text-[10px] font-bold text-[#FF4500] bg-[#FF4500]/10 px-1.5 py-0.5 rounded">
+                  +{arrivalDisplay?.day_offset}d
+                </span>
+              )}
+            </div>
+            
+            <div className="flex items-center gap-2 mt-1.5 text-xs text-zinc-400">
+              <div className="flex items-center gap-1 text-[#FF4500]">
+                {modes.map((m, i) => (
+                  <span key={i} title={m}>{getModeIcon(m)}</span>
+                ))}
+              </div>
+              <span className="truncate max-w-[150px]">{trainLabel || modes.join(' + ')}</span>
+            </div>
+          </div>
+        </div>
 
-      {/* Route Name & Metadata */}
-      <div className="flex flex-col gap-1.5 mb-3 mt-3">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-sm font-medium text-zinc-300 truncate">{sourceName}</span>
-          <span className="text-zinc-600 text-[10px] pl-1">↓</span>
-          <span className="text-sm font-medium text-zinc-300 truncate">{destName}</span>
+        {/* Center Section: Path & Duration */}
+        <div className="flex flex-col md:items-center gap-1 md:w-1/3">
+          <div className="flex items-center gap-2 text-sm font-medium text-zinc-300 w-full md:justify-center">
+            <span className="truncate text-right">{sourceName}</span>
+            <ArrowRight size={14} className="text-zinc-500 shrink-0" />
+            <span className="truncate text-left">{destName}</span>
+          </div>
+          
+          <div className="flex items-center gap-2 text-xs font-semibold mt-1">
+            <span className="text-[#FF4500] bg-[#FF4500]/10 px-2 py-0.5 rounded-full">
+              {formattedDuration}
+            </span>
+            <span className={`px-2 py-0.5 rounded-full ${transferCount === 0 ? 'text-green-400 bg-green-400/10' : 'text-amber-400 bg-amber-400/10'}`}>
+              {transferCount === 0 ? 'Direct' : `${transferCount} Transfer${transferCount > 1 ? 's' : ''}`}
+            </span>
+          </div>
         </div>
-        
-        <div className="flex flex-wrap items-center gap-1.5 text-xs font-normal text-zinc-500 mt-1">
-          <span>{formattedDuration}</span>
-          <span>•</span>
-          <span>{transferCount > 0 ? `${transferCount} Transfer${transferCount > 1 ? 's' : ''}` : 'Direct'}</span>
-        </div>
-      </div>
 
-      {/* Recommendation / Quality Reason */}
-      {showRecommendation && (
-        <div className="text-sm font-normal text-zinc-400 mt-1">
-          {isHero ? `✨ ${recommendation}` : recommendation}
-        </div>
-      )}
-      {/* Missing Data Fields per User Requirement */}
-      {onCompareToggle && (
-        <div className="flex flex-wrap gap-x-4 gap-y-2 mt-4 pt-3 border-t border-white/5">
-          <div className="flex flex-col">
-            <span className="text-[10px] uppercase text-zinc-500 font-bold">Fare</span>
-            <span className="text-sm font-medium text-zinc-300">—</span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] uppercase text-zinc-500 font-bold">Reliability</span>
-            <span className="text-sm font-medium text-zinc-300">Not Available</span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] uppercase text-zinc-500 font-bold">Walk</span>
-            <span className="text-sm font-medium text-zinc-300">—</span>
+        {/* Right Section: Badges */}
+        <div className="flex items-center md:justify-end gap-4 md:w-1/3">
+          {showRecommendation ? (
+            <div className="hidden md:flex flex-col items-end">
+              <span className="text-[10px] uppercase tracking-wider text-[#FF4500] font-bold">Quality</span>
+              <span className="text-sm font-medium text-zinc-300 truncate max-w-[120px]">{recommendation}</span>
+            </div>
+          ) : (
+            <div className="hidden md:flex flex-col items-end">
+              <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold">Reliability</span>
+              <span className="text-sm font-medium text-zinc-400">Standard</span>
+            </div>
+          )}
+          
+          <div className="flex flex-col items-end">
+            <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold">Fare</span>
+            <span className="text-sm font-medium text-zinc-400">—</span>
           </div>
         </div>
-      )}
-    </button>
+
+      </button>
     </div>
   );
 };

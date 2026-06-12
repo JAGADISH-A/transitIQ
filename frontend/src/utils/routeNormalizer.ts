@@ -1,6 +1,6 @@
 import type { JourneyRoute, TransferJourney, NormalizedRoute } from '../types/transit';
 
-const createDisplayFallback = (time: string | null) => {
+const createDisplayFallback = (time: string | null | undefined) => {
   if (!time) return null;
   const parts = time.split(':');
   if (parts.length >= 2) {

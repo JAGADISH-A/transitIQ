@@ -1,0 +1,24 @@
+{
+  "journey_type": "DIRECT",
+  "feed": "railways",
+  "trip_id": "12633",
+  "route_id": "12633",
+  "route_name": "KANYAKUMARI EXP",
+  "source_stop": "CHENNAI EGMORE",
+  "destination_stop": "MADURAI JN",
+  "stops_between": 10,
+  "departure_time": "17:20:00",
+  "arrival_time": "24:45:00",
+  "departure_display": null,
+  "arrival_display": null,
+  "duration_minutes": 445,
+  "shape_id": "12633",
+  "quality": {
+    "score": 92.5,
+    "classification": "Excellent",
+    "recommendation_reason": "Direct route without transfers",
+    "route_flags": [
+      "DIRECT_SERVICE"
+    ]
+  }
+}
