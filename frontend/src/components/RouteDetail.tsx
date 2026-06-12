@@ -76,6 +76,25 @@ export const RouteDetail: React.FC<RouteDetailProps> = ({
     </div>
   );
 
+  const toTitleCase = (str: string) => {
+    return str.replace(
+      /\w\S*/g,
+      (txt) => txt.charAt(0).toUpperCase() + txt.substring(1).toLowerCase()
+    );
+  };
+
+  const getTrainTitle = (journeyRoute: JourneyRoute) => {
+    const name = journeyRoute.route_name;
+    const id = journeyRoute.route_id;
+    
+    if (name && id && name !== id) return `🚆 ${toTitleCase(name)} (${id})`;
+    if (name && name === id) return `🚆 Train No. ${id}`;
+    if (name) return `🚆 ${toTitleCase(name)}`;
+    if (id) return `🚆 Train No. ${id}`;
+    
+    return "Board Train";
+  };
+
   const renderTimeline = () => {
     if (!isTransfer) {
       const r = route.originalData as JourneyRoute;
@@ -86,7 +105,7 @@ export const RouteDetail: React.FC<RouteDetailProps> = ({
             stationName={r.source_stop}
             MainIcon={TrainFront}
             iconColor="text-green-500"
-            actionTitle="Board Train"
+            actionTitle={getTrainTitle(r)}
             ActionIcon={TrainFront}
             actionSubtitle={r.feed ? r.feed.toUpperCase() : 'LOCAL'}
             statusText={`On Board · ${r.duration_minutes} min`}
@@ -121,7 +140,7 @@ export const RouteDetail: React.FC<RouteDetailProps> = ({
           stationName={r.first_leg.source_stop}
           MainIcon={TrainFront}
           iconColor="text-green-500"
-          actionTitle="Board Train"
+          actionTitle={getTrainTitle(r.first_leg)}
           ActionIcon={TrainFront}
           actionSubtitle={r.first_leg.feed ? r.first_leg.feed.toUpperCase() : 'LOCAL'}
           statusText={`On Board · ${r.first_leg.duration_minutes} min`}
@@ -152,7 +171,7 @@ export const RouteDetail: React.FC<RouteDetailProps> = ({
           stationName={r.transfer_stop}
           MainIcon={TrainFront}
           iconColor="text-cyan-500"
-          actionTitle="Board Train"
+          actionTitle={getTrainTitle(r.second_leg)}
           ActionIcon={TrainFront}
           actionSubtitle={r.second_leg.feed ? r.second_leg.feed.toUpperCase() : 'LOCAL'}
           statusText={`On Board · ${r.second_leg.duration_minutes} min`}
