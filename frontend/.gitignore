@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+debug_payloads.txt
+debug_payloads_2.txt
+debug_payloads_3.json
+fix_transit.py
+debug_duration.js

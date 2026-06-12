@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { NormalizedRoute } from '../types/transit';
 import { RouteCard } from './RouteCard';
 import { RouteDetail } from './RouteDetail';
+import { recommendBestRoute } from '../ai/journeyIntelligence';
 
 interface RecommendedRoutesProps {
   routes?: NormalizedRoute[];
@@ -65,9 +66,13 @@ export default function RecommendedRoutes({
   // Sort by quality score (lower is better, directly mapped in normalizeRoutes)
   const sortedRoutes = uniqueNormalizedRoutes.sort((a, b) => a.qualityScore - b.qualityScore);
 
+  const recommendation = uniqueNormalizedRoutes.length > 0 ? recommendBestRoute(uniqueNormalizedRoutes) : null;
+  const recommendedRoute = recommendation ? uniqueNormalizedRoutes.find(r => r.id === recommendation.recommendedRouteId) || sortedRoutes[0] : sortedRoutes[0];
+  const otherRoutes = sortedRoutes.filter(r => r.id !== recommendedRoute?.id);
+
   const totalRoutes = sortedRoutes.length;
-  const displayRoutes = sortedRoutes.slice(0, 5);
-  const hiddenCount = totalRoutes - 5;
+  const displayRoutes = otherRoutes.slice(0, 4);
+  const hiddenCount = totalRoutes - (displayRoutes.length + (recommendedRoute ? 1 : 0));
 
   const isDetailView = selectedRoute !== null;
 
@@ -84,23 +89,30 @@ export default function RecommendedRoutes({
             className="flex flex-col gap-6 w-full"
           >
             {/* Hero Section */}
-            {sortedRoutes.length > 0 && (
+            {recommendedRoute && (
               <div className="flex flex-col gap-3">
-                <h3 className="text-sm font-medium text-zinc-400">Recommended For You</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-zinc-400">Recommended For You</h3>
+                  {recommendation && (
+                    <div className="flex items-center gap-1.5 px-2 py-1 bg-purple-500/10 text-purple-400 rounded-md text-[10px] font-bold uppercase tracking-wider border border-purple-500/20">
+                      <span className="text-xs">🧠</span> Recommended by TransitIQ
+                    </div>
+                  )}
+                </div>
                 <RouteCard 
-                  route={sortedRoutes[0]}
+                  route={recommendedRoute}
                   isHero={true}
-                  onClick={() => onRouteSelect?.(sortedRoutes[0])}
+                  onClick={() => onRouteSelect?.(recommendedRoute)}
                 />
               </div>
             )}
             
             {/* Other Options Section */}
-            {sortedRoutes.length > 1 && (
+            {otherRoutes.length > 0 && (
               <div className="flex flex-col gap-3">
                 <h3 className="text-sm font-medium text-zinc-400">Other Options</h3>
                 <div className="flex flex-col gap-2">
-                  {displayRoutes.slice(1).map(route => {
+                  {displayRoutes.map(route => {
                     return (
                       <RouteCard 
                         key={route.id}

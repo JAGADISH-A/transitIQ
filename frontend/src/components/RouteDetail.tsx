@@ -1,7 +1,8 @@
 import React from 'react';
-import { TrainFront, Footprints, User, Target, Play, CheckCircle2, X, ArrowLeft } from 'lucide-react';
+import { TrainFront, Footprints, User, Target, Play, CheckCircle2, X, ArrowLeft, Brain } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { NormalizedRoute, JourneyRoute, TransferJourney } from '../types/transit';
+import { analyzeJourney } from '../ai/journeyIntelligence';
 
 interface RouteDetailProps {
   route: NormalizedRoute;
@@ -250,6 +251,37 @@ export const RouteDetail: React.FC<RouteDetailProps> = ({
           )}
         </div>
       </div>
+
+      {/* TransitIQ Journey Explanation */}
+      {(() => {
+        const insight = analyzeJourney(route);
+        const expl = insight.explanation;
+        return (
+          <div className="flex flex-col gap-3 mb-6 p-4 bg-white/[0.02] border border-white/5 rounded-xl">
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2 text-[14px] font-semibold text-zinc-200">
+                <Brain size={16} className="text-purple-400" />
+                TransitIQ Journey Explanation
+              </div>
+              <div className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide
+                ${expl.confidence === 'high' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 
+                  expl.confidence === 'medium' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 
+                  'bg-red-500/10 text-red-400 border border-red-500/20'}`}
+              >
+                {expl.confidence} Confidence
+              </div>
+            </div>
+            <p className="text-[13px] text-zinc-400 leading-relaxed">
+              {expl.summary}
+            </p>
+            <ol className="flex flex-col gap-1.5 mt-2 list-decimal list-inside text-[13px] text-zinc-300">
+              {expl.steps.map((step, i) => (
+                <li key={i} className="pl-1 marker:text-zinc-500">{step}</li>
+              ))}
+            </ol>
+          </div>
+        );
+      })()}
 
       {/* Main Journey Flow */}
       <div className="mb-4 pl-2 mt-2">

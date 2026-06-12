@@ -214,7 +214,7 @@ function App() {
     setError(null);
   };
 
-  const handleSearch = async (source: string, destination: string, departureTime?: string): Promise<{directCount: number; transferCount: number; source: string; destination: string; error?: string; narrative?: JourneyNarrative; topDirectRoute?: JourneyRoute; topTransferRoute?: TransferJourney}> => {
+  const handleSearch = async (source: string, destination: string, departureTime?: string): Promise<{directCount: number; transferCount: number; source: string; destination: string; error?: string; narrative?: JourneyNarrative; topDirectRoute?: JourneyRoute; topTransferRoute?: TransferJourney; normalizedRoutes?: NormalizedRoute[]}> => {
     setIsLoading(true);
     setError(null);
     setJourneyRoutes([]);
@@ -271,6 +271,7 @@ function App() {
         if (data.success && (data.routes.length > 0 || data.transfer_routes.length > 0)) {
           setJourneyRoutes(data.routes);
           setTransferRoutes(data.transfer_routes || []);
+          const normalized = normalizeRoutes(data.routes, data.transfer_routes || []);
           return { 
              directCount: data.routes.length, 
              transferCount: (data.transfer_routes || []).length, 
@@ -278,7 +279,8 @@ function App() {
              destination: d.stop_name, 
              narrative: data.narrative,
              topDirectRoute: data.routes[0],
-             topTransferRoute: data.transfer_routes ? data.transfer_routes[0] : undefined
+             topTransferRoute: data.transfer_routes ? data.transfer_routes[0] : undefined,
+             normalizedRoutes: normalized
           };
         } else {
           setError('No routes found between these stops.');
@@ -351,6 +353,7 @@ function App() {
                 <FloatingAIAssistant 
                   onSearch={handleSearch} 
                   activeRoute={selectedRoute ? selectedRoute.originalData : null} 
+                  onRouteSelect={(r) => { setAppView('planner'); handleRouteSelect(r); }}
                 />
               </div>
             )}
@@ -379,6 +382,7 @@ function App() {
       <FloatingAIAssistant 
         onSearch={handleSearch} 
         activeRoute={selectedRoute ? selectedRoute.originalData : null} 
+        onRouteSelect={(r) => { setAppView('planner'); handleRouteSelect(r); }}
       />
 
       {/* Global Alert Modal */}
