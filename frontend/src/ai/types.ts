@@ -26,8 +26,43 @@ export interface RouteRecommendation {
   confidence: "high" | "medium" | "low";
   advice?: TravelAdvice;
   transferRisk?: TransferRiskAnalysis;
+  workspaceIntelligence?: WorkspaceIntelligence;
+  comparison?: RouteComparison;
 }
 
 export interface JourneyInsight {
-  explanation: RouteExplanation;
+  category: "connection" | "long_distance" | "layover" | "comfort" | "timing" | "general";
+  title: string;
+  message: string;
+  priority: "low" | "medium" | "high";
+}
+
+export interface RouteTradeoff {
+  title: string;
+  description: string;
+  type: "advantage" | "tradeoff" | "alternative";
+}
+
+export interface RouteComparison {
+  winnerRouteId: string;
+  advantages: RouteTradeoff[];
+  tradeoffs: RouteTradeoff[];
+  alternatives: {
+    routeId: string;
+    label: string;
+    pros: string[];
+    cons: string[];
+  }[];
+}
+
+export interface TimelineMilestone {
+  step: string;
+  time?: string;
+  icon: "board" | "travel" | "arrive" | "wait" | "change" | "destination";
+}
+
+export interface WorkspaceIntelligence {
+  guidance: string;
+  timeline: TimelineMilestone[];
+  tips: string[];
 }

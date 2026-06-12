@@ -1,5 +1,5 @@
 import React from 'react';
-import { TrainFront, Footprints, User, Target, Play, CheckCircle2, X, ArrowLeft, Brain } from 'lucide-react';
+import { TrainFront, Footprints, User, Target, Play, CheckCircle2, X, ArrowLeft, Brain, Map } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { NormalizedRoute, JourneyRoute, TransferJourney } from '../types/transit';
 import { analyzeJourney } from '../ai/journeyIntelligence';
@@ -7,11 +7,13 @@ import { analyzeJourney } from '../ai/journeyIntelligence';
 interface RouteDetailProps {
   route: NormalizedRoute;
   onBack: () => void;
+  onOpenRoadmap?: () => void;
 }
 
 export const RouteDetail: React.FC<RouteDetailProps> = ({ 
   route, 
-  onBack
+  onBack,
+  onOpenRoadmap
 }) => {
   if (!route) return null;
   const isTransfer = route.isTransfer;
@@ -251,6 +253,17 @@ export const RouteDetail: React.FC<RouteDetailProps> = ({
           )}
         </div>
       </div>
+
+      {/* Prominent Journey Roadmap CTA */}
+      {onOpenRoadmap && (
+        <button 
+          onClick={onOpenRoadmap}
+          className="w-full flex items-center justify-center gap-2 mb-6 py-3.5 bg-[#FF4500] hover:bg-[#e63e00] text-white font-semibold rounded-xl shadow-[0_4px_20px_rgba(255,69,0,0.3)] hover:shadow-[0_6px_25px_rgba(255,69,0,0.4)] transition-all"
+        >
+          <Map size={18} />
+          <span>Open Journey Roadmap</span>
+        </button>
+      )}
 
       {/* TransitIQ Journey Explanation */}
       {(() => {

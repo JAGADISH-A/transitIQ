@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Sparkles, X, Send, Loader2, Train, AlertTriangle, Clock, MapPin, ArrowRight } from 'lucide-react';
+import { Sparkles, X, Send, Loader2, Train, AlertTriangle, Clock, MapPin, ArrowRight, RefreshCw, BarChart2, GitBranch, Footprints, Zap } from 'lucide-react';
 
 import type { JourneyNarrative, JourneyContext, JourneyRoute, NormalizedRoute, TransferJourney } from '../types/transit';
-import type { RouteRecommendation } from '../ai/types';
-import { recommendBestRoute, analyzeTransferRisk } from '../ai/journeyIntelligence';
+import type { RouteRecommendation, JourneyInsight } from '../ai/types';
+import { recommendBestRoute } from '../ai/routeAdvisor';
+import { analyzeTransferRisk } from '../ai/transferRiskAnalyzer';
+import { generateWorkspaceIntelligence } from '../ai/journeyConcierge';
 
 type MessageType = 'text' | 'searching' | 'result' | 'error' | 'not-found';
 
@@ -20,6 +22,7 @@ type Message = {
   suggestions?: string[];
   recommendation?: RouteRecommendation;
   recommendedRoute?: NormalizedRoute;
+  allRoutes?: NormalizedRoute[];
 };
 
 interface SearchResult {
@@ -35,9 +38,12 @@ interface SearchResult {
 }
 
 interface FloatingAIAssistantProps {
-  onSearch?: (source: string, destination: string, departureTime?: string) => Promise<SearchResult>;
-  activeRoute?: any;
+  onSearch: (source: string, destination: string, time?: string) => Promise<any>;
+  activeRoute: NormalizedRoute | null;
   onRouteSelect?: (route: NormalizedRoute | null) => void;
+  tripStops?: any[];
+  transferStops?: {leg1: any[], leg2: any[]} | null;
+  onStationFocus?: (coords: [number, number] | null) => void;
 }
 
 const chipSuggestions = [
@@ -54,101 +60,106 @@ const formatDuration = (mins: number) => {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 };
 
-/* ─── Assistant message card ─── */
-const AssistantCard = React.memo(({ msg, onRouteSelect }: { msg: Message, onRouteSelect?: (route: NormalizedRoute | null) => void }) => {
-  if (msg.type === 'searching') {
-    return (
-      <div className="flex items-start gap-3 w-full max-w-[90%]">
-        <div className="w-6 h-6 rounded bg-[#FF4500] flex items-center justify-center shrink-0 mt-0.5">
-          <Sparkles size={12} className="text-white" />
-        </div>
-        <div className="bg-[#161616] border border-[#252525] rounded-lg px-4 py-3 border-l-2 border-l-[#FF4500]">
-          <div className="flex items-center gap-2 text-[13px] text-[#FF4500] font-medium mb-1.5">
-            <Train size={14} />
-            <span>Searching transit network</span>
-          </div>
-          {msg.source && msg.destination && (
-            <div className="flex items-center gap-2 text-[13px] text-[#888] mt-2">
-              <span className="bg-[#1e1e1e] border border-[#2a2a2a] rounded px-2 py-0.5 text-[#bbb]">📍 {msg.source}</span>
-              <span className="text-[#555]">→</span>
-              <span className="bg-[#1e1e1e] border border-[#2a2a2a] rounded px-2 py-0.5 text-[#bbb]">🚉 {msg.destination}</span>
-            </div>
-          )}
-          <div className="flex items-center gap-1.5 mt-2">
-            <Loader2 size={12} className="text-[#FF4500] animate-spin" />
-            <span className="text-[12px] text-[#666]">Looking for available routes...</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
-  if (msg.type === 'result') {
+/* ─── Assistant message card ─── */
+const AssistantCard = React.memo(({ 
+  msg, 
+  activeRouteId,
+  allRoutes,
+  onRouteSelect 
+}: { 
+  msg: Message, 
+  activeRouteId?: string,
+  allRoutes?: NormalizedRoute[],
+  onRouteSelect?: (route: NormalizedRoute | null) => void 
+}) => {
+  const activeRoute = allRoutes?.find(r => r.id === activeRouteId) || msg.recommendedRoute;
+  const intel = activeRoute ? generateWorkspaceIntelligence(activeRoute) : null;
+
+  if (msg.role === 'assistant') {
     return (
-      <div className="flex items-start gap-3 w-full max-w-[95%]">
-        <div className="w-6 h-6 rounded bg-[#FF4500] flex items-center justify-center shrink-0 mt-0.5">
-          <Sparkles size={12} className="text-white" />
-        </div>
-        
-        {msg.recommendation && msg.recommendedRoute ? (
-          <div className="w-full flex flex-col gap-3">
-            {/* Expansive Recommendation Card */}
-            <div className="bg-[#111] border border-[#252525] shadow-lg rounded-xl p-5 w-full flex flex-col md:flex-row gap-5 items-start justify-between">
-              
-              <div className="flex flex-col gap-3 flex-1 w-full">
-                <h3 className="text-[13px] font-bold text-[#FF4500] flex items-center gap-2 mb-1 uppercase tracking-wide">
-                  🧠 TransitIQ Recommendation
-                </h3>
-                <div className="flex items-center gap-2">
-                  <h4 className="text-[18px] font-bold text-white flex items-center gap-1.5">
-                    {msg.recommendation.advice?.headline || msg.recommendation.title}
-                  </h4>
-                  <div className={`ml-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide shrink-0
-                    ${msg.recommendation.confidence === 'high' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 
-                      msg.recommendation.confidence === 'medium' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 
-                      'bg-red-500/10 text-red-400 border border-red-500/20'}`}
-                  >
-                    {msg.recommendation.confidence} Match
+      <div className="flex w-full mb-4">
+        <div className="flex items-start gap-3 w-full">
+          <div className="w-8 h-8 rounded-full bg-[#111] border border-[#222] flex items-center justify-center shrink-0 shadow-lg mt-0.5">
+            {msg.type === 'searching' ? (
+              <Loader2 size={14} className="text-[#888] animate-spin" />
+            ) : (
+              <Sparkles size={14} className="text-[#FF4500]" />
+            )}
+          </div>
+          
+          {msg.type === 'searching' ? (
+            <div className="bg-[#111] border border-[#222] rounded-lg px-4 py-3 flex items-center gap-3">
+              <span className="text-[#888] text-[14px]">Searching optimal routes...</span>
+            </div>
+          ) : msg.type === 'result' && msg.recommendedRoute ? (
+            <div className="flex flex-col gap-2 w-full">
+              <div className="flex flex-col md:flex-row gap-4 bg-[#111] border border-[#252525] rounded-xl p-5 shadow-2xl w-full">
+                <div className="flex-1 flex flex-col gap-5">
+                  
+                  {/* Guidance Section */}
+                  <div className="flex flex-col gap-2">
+                    <h4 className="text-[14px] font-bold text-white flex items-center gap-2">
+                      <Sparkles size={14} className="text-[#FF4500]" /> 🧠 TransitIQ Guidance
+                    </h4>
+                    <p className="text-[14px] text-[#ccc] leading-relaxed">
+                      {intel?.guidance}
+                    </p>
                   </div>
+
+                  {/* Timeline Section */}
+                  {intel?.timeline && intel.timeline.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      <h4 className="text-[14px] font-bold text-white flex items-center gap-2">
+                        <Footprints size={14} className="text-[#FF4500]" /> 🚶 What Happens Next
+                      </h4>
+                      <div className="mt-2 flex flex-col gap-0 border-l-2 border-[#333] ml-2 pl-4 py-1 relative">
+                        {intel.timeline.map((step, i) => (
+                          <div key={i} className="flex items-center gap-3 mb-4 last:mb-0 relative">
+                            <div className="absolute -left-[21px] w-2 h-2 rounded-full bg-[#FF4500]" />
+                            {step.time && <span className="text-[13px] font-medium text-[#888] w-16">{step.time}</span>}
+                            <span className={`text-[13px] ${step.time ? 'text-white' : 'text-[#aaa]'}`}>{step.step}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tips Section */}
+                  {intel?.tips && intel.tips.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      <h4 className="text-[14px] font-bold text-white flex items-center gap-2">
+                        <Zap size={14} className="text-[#FF4500]" /> 💡 Travel Tips
+                      </h4>
+                      <div className="flex flex-col gap-2 mt-1">
+                        {intel.tips.map((tip, i) => (
+                          <div key={i} className="flex items-start gap-2 bg-[#1a1a1a] border border-[#252525] rounded-lg p-3">
+                            <span className="text-[13px] text-[#ccc] leading-relaxed">{tip}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {msg.recommendation.advice && (
-                  <div className="text-[14px] text-[#e0e0e0] leading-relaxed whitespace-pre-wrap my-2">
-                    {msg.recommendation.advice.message}
+                {onRouteSelect && (
+                  <div className="shrink-0 flex items-center justify-end w-full md:w-auto md:h-full">
+                    <button 
+                      onClick={() => onRouteSelect(activeRoute!)}
+                      className="w-full md:w-auto px-5 py-2.5 bg-[#FF4500] hover:bg-[#e63e00] text-white font-medium text-[13px] rounded-lg transition-colors shadow-[0_4px_14px_rgba(255,69,0,0.3)] hover:shadow-[0_6px_20px_rgba(255,69,0,0.4)] focus:outline-none"
+                    >
+                      More Information
+                    </button>
                   </div>
                 )}
-
-                <div className="mt-2 bg-[#1a1a1a] border border-[#252525] rounded-lg p-4">
-                  <p className="text-[13px] text-[#d0d0d0] font-medium mb-3">Why TransitIQ likes this route:</p>
-                  <ul className="flex flex-col gap-2 text-[13px] text-[#aaa]">
-                    {msg.recommendation.reasons.map((r, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <span className="text-green-500 font-bold">✓</span>
-                        <span>{r}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
               </div>
 
-              {onRouteSelect && (
-                <div className="shrink-0 flex items-center justify-end w-full md:w-auto md:h-full">
-                  <button 
-                    onClick={() => onRouteSelect(msg.recommendedRoute!)}
-                    className="w-full md:w-auto px-5 py-2.5 bg-[#FF4500] hover:bg-[#e63e00] text-white font-medium text-[13px] rounded-lg transition-colors shadow-[0_4px_14px_rgba(255,69,0,0.3)] hover:shadow-[0_6px_20px_rgba(255,69,0,0.4)]"
-                  >
-                    Explore Full Journey
-                  </button>
-                </div>
-              )}
+              <div className="flex items-center gap-3 px-1 text-[12px] text-[#888]">
+                <span>Found {msg.directCount} direct, {msg.transferCount} transfer routes</span>
+              </div>
             </div>
-
-            <div className="flex items-center gap-3 px-1 text-[12px] text-[#888]">
-              <span>Found {msg.directCount} direct, {msg.transferCount} transfer routes</span>
-            </div>
-          </div>
-        ) : (
-          <div className="bg-[#161616] border border-[#252525] rounded-lg px-4 py-3 border-l-2 border-l-[#FF4500]">
+          ) : (
+            <div className="bg-[#161616] border border-[#252525] rounded-lg px-4 py-3 border-l-2 border-l-[#FF4500]">
             <div className="flex flex-col gap-2">
               <h4 className="text-[15px] font-semibold text-white">{msg.narrative?.headline || 'Results Found'}</h4>
               <p className="text-[14px] text-[#d0d0d0] leading-relaxed">{msg.narrative?.summary || msg.text}</p>
@@ -174,6 +185,7 @@ const AssistantCard = React.memo(({ msg, onRouteSelect }: { msg: Message, onRout
             </div>
           </div>
         )}
+        </div>
       </div>
     );
   }
@@ -205,7 +217,6 @@ const AssistantCard = React.memo(({ msg, onRouteSelect }: { msg: Message, onRout
     );
   }
 
-  // Default text message
   return (
     <div className="flex items-start gap-3 w-full max-w-[90%]">
       <div className="w-6 h-6 rounded bg-[#FF4500] flex items-center justify-center shrink-0 mt-0.5">
@@ -260,119 +271,213 @@ const ChatInput = ({ onSubmit, disabled, large }: { onSubmit: (t: string) => voi
 };
 
 /* ─── Context Panel Component ─── */
-const ContextPanel = ({ route, recommendation }: { route: NormalizedRoute | null, recommendation?: RouteRecommendation }) => {
+const ContextPanel = ({ 
+  route, 
+  recommendation,
+  allRoutes,
+  onSelectAlternative
+}: { 
+  route: NormalizedRoute | null; 
+  recommendation?: RouteRecommendation;
+  allRoutes?: NormalizedRoute[];
+  onSelectAlternative?: (r: NormalizedRoute) => void;
+}) => {
   if (!route) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 text-center border-l border-[#1e1e1e] bg-zinc-950">
         <div className="w-16 h-16 rounded-full bg-[#111] border border-[#222] flex items-center justify-center mb-4">
           <Sparkles size={24} className="text-[#333]" />
         </div>
-        <h3 className="text-[16px] font-medium text-white/40 mb-2">Journey Intelligence</h3>
+        <h3 className="text-[16px] font-medium text-white/40 mb-2">Journey Dashboard</h3>
         <p className="text-[13px] text-white/20">Ask for a route to view deep insights, comparisons, and predictive travel intelligence here.</p>
       </div>
     );
   }
 
   const { isTransfer, originalData } = route;
-  
-  // Calculate Quality / Risk
-  const qualityScore = route.qualityScore || 0;
-  const qualityPct = Math.max(0, 100 - (qualityScore * 10)); // rough estimate
-  
-  const risk = recommendation?.transferRisk || analyzeTransferRisk(route);
-  let riskLevel = risk.level === 'low' ? 'Low' : risk.level === 'medium' ? 'Medium' : 'High';
-
-  const trainLabel = isTransfer ? 'Multiple Services' : (originalData as JourneyRoute).route_name || 'Direct Service';
+  const risk = recommendation?.transferRisk || (route ? analyzeTransferRisk(route) : null);
+  const isRecommended = recommendation && route.id === recommendation.recommendedRouteId;
+  const activeAlt = !isRecommended ? recommendation?.comparison?.alternatives.find(a => a.routeId === route.id) : null;
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-y-auto border-l border-[#1e1e1e] bg-zinc-950 custom-scrollbar">
-      <div className="p-5 border-b border-[#1e1e1e] sticky top-0 bg-zinc-950/90 backdrop-blur z-10">
-        <h3 className="text-[14px] font-bold text-white tracking-wide uppercase flex items-center gap-2">
-          <Sparkles size={14} className="text-[#FF4500]" /> Journey Intelligence
-        </h3>
+      <div className="p-5 border-b border-[#1e1e1e] sticky top-0 bg-zinc-950/90 backdrop-blur z-10 flex items-center gap-2">
+        <Sparkles size={14} className="text-[#FF4500]" /> 
+        <h3 className="text-[14px] font-bold text-white tracking-wide uppercase">Journey Dashboard</h3>
       </div>
 
       <div className="p-5 flex flex-col gap-6">
         
-        {/* Basic Metadata */}
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-2 text-[13px] text-[#ccc]">
-            <Train size={16} className="text-[#888]" />
-            <span className="font-semibold text-white">{trainLabel}</span>
+        {/* Selected Journey */}
+        <div className="flex flex-col gap-3">
+          <h4 className="text-[13px] font-semibold text-[#888] uppercase tracking-wider flex items-center gap-2">
+            <Train size={14} /> Selected Journey
+          </h4>
+          <div className="bg-[#111] border border-[#222] rounded-lg p-4 flex flex-col gap-4">
+            {!isTransfer ? (
+              <div className="flex flex-col gap-2">
+                <p className="text-[12px] text-[#FF4500] font-semibold uppercase tracking-wider">Train 1: {(originalData as any).route_name}</p>
+                <div className="flex justify-between items-center text-[13px]">
+                  <div className="flex flex-col">
+                    <span className="text-[#888]">From:</span>
+                    <span className="text-white font-medium">{(originalData as any).source_stop}</span>
+                    <span className="text-white">{route.departureDisplay?.display_time}</span>
+                  </div>
+                  <div className="w-px h-8 bg-[#333]" />
+                  <div className="flex flex-col text-right">
+                    <span className="text-[#888]">To:</span>
+                    <span className="text-white font-medium">{(originalData as any).destination_stop}</span>
+                    <span className="text-white">{route.arrivalDisplay?.display_time}</span>
+                  </div>
+                </div>
+                <div className="mt-2 pt-2 border-t border-[#222] text-[12px] text-[#888]">
+                  Travel Time: {formatDuration(route.durationMinutes)}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col gap-2">
+                  <p className="text-[12px] text-[#FF4500] font-semibold uppercase tracking-wider">Train 1: {(originalData as any).first_leg?.route_name}</p>
+                  <div className="flex justify-between items-center text-[13px]">
+                    <div className="flex flex-col">
+                      <span className="text-[#888]">From:</span>
+                      <span className="text-white font-medium">{(originalData as any).first_leg?.source_stop}</span>
+                      <span className="text-white">{(originalData as any).first_leg?.departure_time}</span>
+                    </div>
+                    <div className="w-px h-8 bg-[#333]" />
+                    <div className="flex flex-col text-right">
+                      <span className="text-[#888]">To:</span>
+                      <span className="text-white font-medium">{(originalData as any).first_leg?.destination_stop}</span>
+                      <span className="text-white">{(originalData as any).first_leg?.arrival_time}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="h-px w-full bg-[#333]" />
+                <div className="flex flex-col gap-2">
+                  <p className="text-[12px] text-[#FF4500] font-semibold uppercase tracking-wider">Train 2: {(originalData as any).second_leg?.route_name}</p>
+                  <div className="flex justify-between items-center text-[13px]">
+                    <div className="flex flex-col">
+                      <span className="text-[#888]">From:</span>
+                      <span className="text-white font-medium">{(originalData as any).second_leg?.source_stop}</span>
+                      <span className="text-white">{(originalData as any).second_leg?.departure_time}</span>
+                    </div>
+                    <div className="w-px h-8 bg-[#333]" />
+                    <div className="flex flex-col text-right">
+                      <span className="text-[#888]">To:</span>
+                      <span className="text-white font-medium">{(originalData as any).second_leg?.destination_stop}</span>
+                      <span className="text-white">{(originalData as any).second_leg?.arrival_time}</span>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
+        </div>
 
-          <div className="grid grid-cols-2 gap-3">
+        {/* Train Change Details */}
+        {isTransfer && (
+          <div className="flex flex-col gap-3">
+            <h4 className="text-[13px] font-semibold text-[#888] uppercase tracking-wider flex items-center gap-2">
+              <RefreshCw size={14} /> Train Change Details
+            </h4>
+            <div className="bg-[#111] border border-[#222] rounded-lg p-4">
+              <p className="text-[13px] text-[#ccc] mb-2">You need to change trains at:</p>
+              <p className="text-[14px] font-bold text-white flex items-center gap-1.5 mb-4">
+                <MapPin size={14} className="text-[#FF4500]" /> {route.transferStopName}
+              </p>
+              <p className="text-[13px] text-[#ccc] mb-1">Available time:</p>
+              <p className="text-[14px] font-bold text-white mb-4 flex items-center gap-1.5">
+                <Clock size={14} className="text-amber-500" /> {formatDuration(route.transferWait || 0)}
+              </p>
+              <div className="pt-3 border-t border-[#222]">
+                <p className="text-[12px] font-semibold text-[#888] uppercase tracking-wider mb-1.5">Advice</p>
+                <p className="text-[13px] text-[#ccc] leading-relaxed">{risk?.message}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Quick Journey Facts */}
+        <div className="flex flex-col gap-3">
+          <h4 className="text-[13px] font-semibold text-[#888] uppercase tracking-wider flex items-center gap-2">
+            <BarChart2 size={14} /> Quick Journey Facts
+          </h4>
+          <div className="grid grid-cols-2 gap-2">
             <div className="bg-[#111] border border-[#222] rounded-lg p-3">
-              <p className="text-[11px] text-[#666] uppercase tracking-wider mb-1">Duration</p>
+              <p className="text-[11px] text-[#666] uppercase tracking-wider mb-1">Total Duration</p>
               <p className="text-[14px] font-semibold text-white">{formatDuration(route.durationMinutes)}</p>
             </div>
             <div className="bg-[#111] border border-[#222] rounded-lg p-3">
-              <p className="text-[11px] text-[#666] uppercase tracking-wider mb-1">Transfers</p>
-              <p className="text-[14px] font-semibold text-white">{route.transferCount === 0 ? 'Direct' : route.transferCount}</p>
+              <p className="text-[11px] text-[#666] uppercase tracking-wider mb-1">Number of Trains</p>
+              <p className="text-[14px] font-semibold text-white">{route.transferCount + 1}</p>
+            </div>
+            <div className="bg-[#111] border border-[#222] rounded-lg p-3">
+              <p className="text-[11px] text-[#666] uppercase tracking-wider mb-1">Train Changes</p>
+              <p className="text-[14px] font-semibold text-white">{route.transferCount}</p>
+            </div>
+            <div className="bg-[#111] border border-[#222] rounded-lg p-3">
+              <p className="text-[11px] text-[#666] uppercase tracking-wider mb-1">Waiting Time</p>
+              <p className="text-[14px] font-semibold text-white">{route.transferWait ? formatDuration(route.transferWait) : '0 min'}</p>
             </div>
           </div>
         </div>
 
-        {/* Timeline */}
-        <div className="flex flex-col gap-3">
-          <h4 className="text-[13px] font-semibold text-[#888] uppercase tracking-wider">Journey Overview</h4>
-          <div className="bg-[#111] border border-[#222] rounded-lg p-4 relative">
-            <div className="flex flex-col">
-              <div className="flex gap-4">
-                <div className="flex flex-col items-center">
-                  <div className="w-2.5 h-2.5 rounded-full border-2 border-white bg-black z-10" />
-                  <div className="w-px h-12 bg-[#333]" />
-                </div>
-                <div className="flex flex-col pb-4">
-                  <span className="text-[13px] font-medium text-white">{route.departureDisplay.display_time}</span>
-                  <span className="text-[12px] text-[#888]">{(originalData as any).source_stop || 'Source'}</span>
-                </div>
-              </div>
-
-              {isTransfer && (
-                <div className="flex gap-4 -mt-2">
-                  <div className="flex flex-col items-center">
-                    <div className="w-2 h-2 rounded-full border border-amber-500 bg-amber-500/20 z-10" />
-                    <div className="w-px h-12 bg-amber-500/30 border-l-2 border-dashed border-amber-500/50" />
-                  </div>
-                  <div className="flex flex-col pb-4 -mt-1">
-                    <span className="text-[12px] font-medium text-amber-500">Wait {formatDuration(route.transferWait || 0)}</span>
-                    <span className="text-[12px] text-[#666]">Change at {route.transferStopName}</span>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-4 -mt-2">
-                <div className="flex flex-col items-center">
-                  <div className="w-2.5 h-2.5 rounded-full border-2 border-white bg-[#FF4500] z-10" />
-                </div>
-                <div className="flex flex-col -mt-1">
-                  <span className="text-[13px] font-medium text-white">{route.arrivalDisplay.display_time}</span>
-                  <span className="text-[12px] text-[#888]">{(originalData as any).destination_stop || 'Destination'}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Insight Card */}
-        {recommendation?.advice ? (
-          <div className="bg-[#111] border border-[#222] rounded-lg p-5">
-            <h4 className="text-[13px] font-bold text-[#FF4500] uppercase tracking-wide mb-3 flex items-center gap-1.5">
-              Travel Advisor
+        {/* Comparison Engine */}
+        {isRecommended ? (
+          <div className="flex flex-col gap-3">
+            <h4 className="text-[13px] font-semibold text-[#888] uppercase tracking-wider flex items-center gap-2">
+              <Sparkles size={14} /> 🧠 Why TransitIQ Chose This Route
             </h4>
-            <h5 className="text-[15px] font-bold text-white mb-2">{recommendation.advice.headline}</h5>
-            <div className="text-[13px] text-[#d0d0d0] leading-relaxed whitespace-pre-wrap mb-4">
-              {recommendation.advice.message}
+            <div className="flex flex-col gap-3">
+              {recommendation?.comparison?.advantages?.length ? (
+                <div className="bg-[#111] border border-[#222] rounded-lg p-4">
+                  <p className="text-[12px] font-semibold text-[#888] uppercase tracking-wider mb-3">Advantages</p>
+                  <ul className="flex flex-col gap-3">
+                    {recommendation.comparison.advantages.map((adv, i) => (
+                      <li key={i} className="flex flex-col gap-0.5">
+                        <span className="text-[13px] font-bold text-white">{adv.title}</span>
+                        <span className="text-[13px] text-[#ccc] leading-relaxed">
+                          <span className="text-[#888] mr-1.5">•</span>{adv.description}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {recommendation?.comparison?.tradeoffs?.length ? (
+                <div className="bg-[#111] border border-[#222] rounded-lg p-4">
+                  <p className="text-[12px] font-semibold text-[#888] uppercase tracking-wider mb-3">Things To Know</p>
+                  <ul className="flex flex-col gap-3">
+                    {recommendation.comparison.tradeoffs.map((trd, i) => (
+                      <li key={i} className="flex flex-col gap-0.5">
+                        <span className="text-[13px] font-bold text-white">{trd.title}</span>
+                        <span className="text-[13px] text-[#ccc] leading-relaxed">
+                          <span className="text-[#888] mr-1.5">•</span>{trd.description}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
-            
-            <div className="pt-4 border-t border-[#222]">
-              <p className="text-[11px] text-[#888] font-bold mb-3 uppercase tracking-wider">Key Reasons</p>
-              <ul className="flex flex-col gap-2 text-[12px] text-[#ccc]">
-                {recommendation.reasons.map((r, i) => (
-                  <li key={i} className="flex items-start gap-2">
-                    <span className="text-green-500 font-bold mt-0.5">✓</span>
-                    <span>{r}</span>
+          </div>
+        ) : activeAlt ? (
+          <div className="flex flex-col gap-3">
+            <h4 className="text-[13px] font-semibold text-[#888] uppercase tracking-wider flex items-center gap-2">
+              <Sparkles size={14} /> 🔍 How This Route Compares
+            </h4>
+            <div className="bg-[#111] border border-[#222] rounded-lg p-4">
+              <p className="text-[14px] font-bold text-white mb-3">{activeAlt.label} Alternative</p>
+              <ul className="flex flex-col gap-2">
+                {activeAlt.pros.map((pro, i) => (
+                  <li key={`pro-${i}`} className="text-[13px] text-[#ccc] flex items-start gap-2 leading-relaxed">
+                    <span className="text-emerald-500 font-bold mt-0.5">+</span> {pro}
+                  </li>
+                ))}
+                {activeAlt.cons.map((con, i) => (
+                  <li key={`con-${i}`} className="text-[13px] text-[#ccc] flex items-start gap-2 leading-relaxed">
+                    <span className="text-rose-500 font-bold mt-0.5">-</span> {con}
                   </li>
                 ))}
               </ul>
@@ -380,77 +485,44 @@ const ContextPanel = ({ route, recommendation }: { route: NormalizedRoute | null
           </div>
         ) : null}
 
-        {/* Transfer Intelligence Card */}
-        {risk && (
-          <div className="bg-[#111] border border-[#222] rounded-lg p-5">
-            <h4 className="text-[13px] font-bold text-white uppercase tracking-wide mb-3 flex items-center gap-1.5">
-              Transfer Intelligence
+        {/* Alternative Choices */}
+        {recommendation?.comparison?.alternatives && recommendation.comparison.alternatives.filter(a => a.routeId !== route.id).length > 0 && (
+          <div className="flex flex-col gap-3">
+            <h4 className="text-[13px] font-semibold text-[#888] uppercase tracking-wider flex items-center gap-2">
+              <GitBranch size={14} /> Alternative Choices
             </h4>
-            <h5 className="text-[15px] font-bold text-white mb-3">{risk.title}</h5>
-            
-            <div className="mb-4 bg-[#1a1a1a] p-3 rounded-lg border border-[#252525]">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-[12px] text-[#888] uppercase tracking-wider font-semibold">Risk Score</span>
-                <span className="text-[13px] font-bold text-white">{risk.score} / 100</span>
-              </div>
-              <div className="w-full bg-[#222] rounded-full h-1.5">
-                <div 
-                  className={`h-1.5 rounded-full ${risk.level === 'low' ? 'bg-green-500' : risk.level === 'medium' ? 'bg-amber-500' : 'bg-red-500'}`} 
-                  style={{ width: `${risk.score}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="text-[13px] text-[#d0d0d0] leading-relaxed whitespace-pre-wrap">
-              {risk.message}
-            </div>
-
-            {risk.recommendations && risk.recommendations.length > 0 && (
-               <div className="mt-4 flex flex-col gap-2 border-t border-[#222] pt-4">
-                 {risk.recommendations.map((r, i) => (
-                    <div key={i} className="flex gap-2 items-start text-[12px] text-[#aaa]">
-                       <span className="text-amber-500 font-bold mt-0.5">!</span>
-                       <span>{r}</span>
+            <div className="flex flex-col gap-3">
+              {recommendation.comparison.alternatives.filter(a => a.routeId !== route.id).map((alt, i) => {
+                const altRoute = allRoutes?.find(r => r.id === alt.routeId);
+                return (
+                  <div key={i} className="bg-[#111] border border-[#222] rounded-lg p-3 flex flex-col gap-3 group transition-colors hover:border-[#444]">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[14px] font-bold text-white">{alt.label}</span>
+                      <button 
+                        onClick={() => altRoute && onSelectAlternative?.(altRoute)}
+                        className="px-3 py-1.5 rounded-lg bg-[#222] hover:bg-[#FF4500] border border-[#333] hover:border-[#FF4500] text-[12px] font-medium text-white transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                      >
+                        View Route
+                      </button>
                     </div>
-                 ))}
-               </div>
-            )}
+                    <ul className="flex flex-col gap-1.5">
+                      {alt.pros.map((pro, j) => (
+                        <li key={`pro-${j}`} className="text-[13px] text-[#ccc] flex items-start gap-2 leading-relaxed">
+                          <span className="text-emerald-500 font-bold mt-0.5">+</span> {pro}
+                        </li>
+                      ))}
+                      {alt.cons.map((con, j) => (
+                        <li key={`con-${j}`} className="text-[13px] text-[#ccc] flex items-start gap-2 leading-relaxed">
+                          <span className="text-rose-500 font-bold mt-0.5">-</span> {con}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
-
-        {/* Quick Stats */}
-        <div className="flex flex-col gap-3">
-          <h4 className="text-[13px] font-semibold text-[#888] uppercase tracking-wider">Quick Stats</h4>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-[#111] border border-[#222] rounded-lg px-3 py-2.5">
-              <div className="flex justify-between items-center mb-1.5">
-                <span className="text-[11px] text-[#666] uppercase">Quality</span>
-                <span className="text-[12px] font-bold text-white">{qualityPct}%</span>
-              </div>
-              <div className="w-full bg-[#222] rounded-full h-1.5">
-                <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${qualityPct}%` }}></div>
-              </div>
-            </div>
-            <div className="bg-[#111] border border-[#222] rounded-lg px-3 py-2.5">
-              <span className="text-[11px] text-[#666] uppercase block mb-1">Transfer Risk</span>
-              <span className={`text-[12px] font-bold ${riskLevel === 'Low' ? 'text-green-400' : riskLevel === 'Medium' ? 'text-amber-400' : 'text-red-400'}`}>
-                {riskLevel}
-              </span>
-            </div>
-            <div className="bg-[#111] border border-[#222] rounded-lg px-3 py-2.5">
-              <span className="text-[11px] text-[#666] uppercase block mb-1">Complexity</span>
-              <span className={`text-[12px] font-bold ${route.transferCount === 0 ? 'text-green-400' : 'text-amber-400'}`}>
-                {route.transferCount === 0 ? 'Low' : 'High'}
-              </span>
-            </div>
-            <div className="bg-[#111] border border-[#222] rounded-lg px-3 py-2.5">
-              <span className="text-[11px] text-[#666] uppercase block mb-1">Confidence</span>
-              <span className="text-[12px] font-bold text-white">
-                {recommendation?.confidence ? recommendation.confidence.toUpperCase() : 'N/A'}
-              </span>
-            </div>
-          </div>
-        </div>
 
       </div>
     </div>
@@ -458,7 +530,14 @@ const ContextPanel = ({ route, recommendation }: { route: NormalizedRoute | null
 };
 
 /* ─── Main component ─── */
-export default function FloatingAIAssistant({ onSearch, activeRoute, onRouteSelect }: FloatingAIAssistantProps) {
+export default function FloatingAIAssistant({ 
+  onSearch, 
+  activeRoute, 
+  onRouteSelect,
+  tripStops,
+  transferStops,
+  onStationFocus 
+}: FloatingAIAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -603,7 +682,8 @@ export default function FloatingAIAssistant({ onSearch, activeRoute, onRouteSele
               transferCount: r.transferCount,
               narrative: r.narrative,
               recommendation,
-              recommendedRoute
+              recommendedRoute,
+              allRoutes: r.normalizedRoutes,
             });
           }
         }
@@ -622,8 +702,22 @@ export default function FloatingAIAssistant({ onSearch, activeRoute, onRouteSele
   }, [isLoading, onSearch, addMsg, sessionContext]);
 
   const lastRecMsg = [...messages].reverse().find(m => m.recommendation);
-  const currentRecRoute = lastRecMsg?.recommendedRoute || null;
-  const currentRec = lastRecMsg?.recommendation;
+  const latestMsgId = lastRecMsg?.id;
+
+  const [panelMsgId, setPanelMsgId] = useState<string | null>(null);
+  const [panelRouteId, setPanelRouteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (latestMsgId && latestMsgId !== panelMsgId) {
+      setPanelMsgId(latestMsgId);
+      setPanelRouteId(lastRecMsg?.recommendedRoute?.id || null);
+    }
+  }, [latestMsgId, panelMsgId, lastRecMsg]);
+
+  const panelMsg = messages.find(m => m.id === panelMsgId);
+  const currentRecRoute = panelMsg?.allRoutes?.find(r => r.id === panelRouteId) || panelMsg?.recommendedRoute || null;
+  const currentRec = panelMsg?.recommendation;
+  const allRoutes = panelMsg?.allRoutes || [];
 
   const handleRouteSelectWithClose = (route: NormalizedRoute | null) => {
     if (onRouteSelect) {
@@ -697,7 +791,13 @@ export default function FloatingAIAssistant({ onSearch, activeRoute, onRouteSele
                     {messages.map(m =>
                       m.role === 'user'
                         ? <UserBubble key={m.id} text={m.text} />
-                        : <AssistantCard key={m.id} msg={m} onRouteSelect={handleRouteSelectWithClose} />
+                        : <AssistantCard 
+                            key={m.id} 
+                            msg={m} 
+                            activeRouteId={m.id === panelMsgId ? panelRouteId || undefined : undefined} 
+                            allRoutes={m.id === panelMsgId ? m.allRoutes : undefined}
+                            onRouteSelect={handleRouteSelectWithClose} 
+                          />
                     )}
                     {isLoading && (
                       <div className="flex items-center gap-1.5 ml-11 h-5">
@@ -717,7 +817,12 @@ export default function FloatingAIAssistant({ onSearch, activeRoute, onRouteSele
 
             {/* Right Panel: Context / Journey Intelligence */}
             <div className="hidden md:flex w-[32%] h-full relative">
-              <ContextPanel route={currentRecRoute} recommendation={currentRec} />
+              <ContextPanel 
+                route={currentRecRoute} 
+                recommendation={currentRec}
+                allRoutes={allRoutes}
+                onSelectAlternative={(r) => setPanelRouteId(r.id)}
+              />
             </div>
           </div>
         </div>

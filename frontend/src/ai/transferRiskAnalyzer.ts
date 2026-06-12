@@ -15,33 +15,33 @@ export function analyzeTransferRisk(route: NormalizedRoute): TransferRiskAnalysi
     score = 100;
     level = "low";
     title = "🟢 Direct Journey";
-    message = "No transfers required.\n\nYou can remain onboard for the entire journey.";
+    message = "This is the simplest way to travel. Stay on the same train for the entire journey with no station changes required.";
   } else if (wait !== undefined) {
     if (wait < 5) {
       score = 20;
       level = "high";
-      title = "🔴 High Risk Connection";
-      message = `This transfer leaves very little room for delays.\n\nA late arrival could cause you to miss the next service at ${station}.`;
+      title = `⚠ Very tight connection at ${station}`;
+      message = "A delay on your first train could make this connection difficult. Move quickly to your next platform.";
     } else if (wait < 10) {
       score = 45;
       level = "high";
-      title = "🟠 Tight Connection";
-      message = `You'll have only ${wait} minutes between trains.\n\nReach your next platform promptly after arrival at ${station}.`;
+      title = `⏱ ${wait} minutes to change trains at ${station}`;
+      message = "This leaves little room for delays. We recommend proceeding directly to your next platform upon arrival.";
     } else if (wait < 20) {
       score = 70;
       level = "medium";
-      title = "🟡 Moderate Transfer";
-      message = `You'll have around ${wait} minutes to make your connection at ${station}.\n\nPay attention to platform information after arrival.`;
+      title = `⏱ About ${wait} minutes to connect at ${station}`;
+      message = "This should be enough time, but pay attention to platform announcements as soon as you arrive.";
     } else if (wait <= 60) {
       score = 90;
       level = "low";
-      title = "🟢 Comfortable Transfer";
-      message = `${wait} minute transfer window at ${station}.\n\nThis should provide enough time to move between services without rushing.`;
+      title = `🟢 Comfortable ${wait} minute connection at ${station}`;
+      message = "You should have plenty of time to move between services without rushing.";
     } else {
       score = 60;
       level = "medium";
-      title = "⚠ Long Layover";
-      message = `This journey includes a ${wait} minute wait at ${station}.\n\nWhile the connection is safe, it significantly increases total travel time.`;
+      title = `☕ ${wait} minute wait at ${station}`;
+      message = "This connection is very safe, but it adds significant waiting time to your journey.";
     }
   }
 

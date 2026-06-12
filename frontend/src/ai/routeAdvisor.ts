@@ -2,6 +2,8 @@ import type { NormalizedRoute } from '../types/transit';
 import type { RouteRecommendation } from './types';
 import { generateTravelAdvice } from './travelAdvisor';
 import { analyzeTransferRisk } from './transferRiskAnalyzer';
+import { generateWorkspaceIntelligence } from './journeyConcierge';
+import { analyzeRouteTradeoffs } from './routeTradeoffAnalyzer';
 
 export function recommendBestRoute(routes: NormalizedRoute[]): RouteRecommendation | null {
   if (!routes || routes.length === 0) return null;
@@ -52,9 +54,9 @@ export function recommendBestRoute(routes: NormalizedRoute[]): RouteRecommendati
   const best = scoredRoutes[0];
   const worst = scoredRoutes[scoredRoutes.length - 1];
 
-  let title = "TransitIQ Recommendation";
+  const title = "TransitIQ Recommendation";
   let summary = "";
-  let finalReasons = [...best.reasons];
+  const finalReasons = [...best.reasons];
   let confidence: "high" | "medium" | "low" = "medium";
 
   // Compare best with second best if exists
@@ -104,6 +106,8 @@ export function recommendBestRoute(routes: NormalizedRoute[]): RouteRecommendati
 
   const advice = generateTravelAdvice(best.route, routes);
   const transferRisk = analyzeTransferRisk(best.route);
+  const workspaceIntelligence = generateWorkspaceIntelligence(best.route);
+  const comparison = analyzeRouteTradeoffs(routes, best.route);
 
   return {
     recommendedRouteId: best.route.id,
@@ -112,6 +116,8 @@ export function recommendBestRoute(routes: NormalizedRoute[]): RouteRecommendati
     reasons: uniqueReasons.length > 0 ? uniqueReasons : ["Provides the most balanced travel experience"],
     confidence,
     advice,
-    transferRisk
+    transferRisk,
+    workspaceIntelligence,
+    comparison
   };
 }

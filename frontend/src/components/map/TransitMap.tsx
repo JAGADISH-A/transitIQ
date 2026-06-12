@@ -17,6 +17,7 @@ interface TransitMapProps {
   transferStops?: {leg1: TripStop[], leg2: TripStop[]} | null;
   viewMode?: 'journey' | 'full';
   tripStops?: TripStop[];
+  focusedLocation?: [number, number] | null;
 }
 
 const BoundsUpdater = ({ bounds }: { bounds: L.LatLngBounds | null }) => {
@@ -40,6 +41,16 @@ const BoundsUpdater = ({ bounds }: { bounds: L.LatLngBounds | null }) => {
       });
     }
   }, [map, bounds]);
+  return null;
+};
+
+const LocationFocuser = ({ location }: { location: [number, number] | null }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (location) {
+      map.flyTo(location, 14, { duration: 1.2 });
+    }
+  }, [map, location]);
   return null;
 };
 
@@ -73,7 +84,8 @@ export default function TransitMap({
   transferShapes,
   viewMode = 'journey',
   tripStops = [],
-  transferStops = null
+  transferStops = null,
+  focusedLocation = null
 }: TransitMapProps) {
   // If neither is provided, center somewhere default (e.g., Chennai)
   const defaultCenter: [number, number] = [13.0827, 80.2707];
@@ -281,7 +293,7 @@ export default function TransitMap({
           <Polyline positions={transferSegments.leg2.full} color="#9CA3AF" weight={3} opacity={0.4} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
         )}
         {transferSegments.leg2?.journey && (
-          <Polyline positions={transferSegments.leg2.journey} color="#10B981" weight={4} opacity={0.9} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
+          <Polyline positions={transferSegments.leg2.journey} color="#fb923c" weight={4} opacity={0.8} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
         )}
 
         {/* Intermediate Stop Markers */}
@@ -289,7 +301,7 @@ export default function TransitMap({
         
         {transferStops?.leg1 && transferStops.leg1.length > 0 && renderStops(transferStops.leg1, selectedRoute?.sourceName || sourceName || '', selectedTransferRoute?.transfer_stop || '', '#F97316')}
         
-        {transferStops?.leg2 && transferStops.leg2.length > 0 && renderStops(transferStops.leg2, selectedTransferRoute?.transfer_stop || '', selectedRoute?.destName || destinationName || '', '#10B981')}
+        {transferStops?.leg2 && transferStops.leg2.length > 0 && renderStops(transferStops.leg2, selectedTransferRoute?.transfer_stop || '', selectedRoute?.destName || destinationName || '', '#fb923c')}
 
         {sourcePosition && (
           <Marker position={sourcePosition} icon={createCustomIcon('#097752ff', 16)}>
@@ -322,7 +334,7 @@ export default function TransitMap({
         )}
 
         {transferPosition && selectedTransferRoute && (
-          <Marker position={transferPosition} icon={createCustomIcon('#F59E0B', 14)}>
+          <Marker position={transferPosition} icon={createCustomIcon('#F59E0B', 18)}>
             <Popup className="transit-popup">
               <div className="font-sans">
                 <div className="text-xs font-medium text-zinc-500 mb-1">
@@ -336,7 +348,8 @@ export default function TransitMap({
           </Marker>
         )}
 
-        {bounds && <BoundsUpdater bounds={bounds} />}
+        {bounds && !focusedLocation && <BoundsUpdater bounds={bounds} />}
+        {focusedLocation && <LocationFocuser location={focusedLocation} />}
       </MapContainer>
 
       {/* Floating Legend */}
@@ -357,12 +370,12 @@ export default function TransitMap({
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-[#F97316]" />
-          <span>{transferPosition ? "First Segment" : "Your Segment"}</span>
+          <span>{transferPosition ? "Active Segment" : "Your Segment"}</span>
         </div>
         {transferPosition && (
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-[#10B981]" />
-            <span>Second Segment</span>
+            <div className="w-3 h-3 rounded-full bg-[#fb923c]" />
+            <span>Future Segment</span>
           </div>
         )}
         <div className="flex items-center gap-2">

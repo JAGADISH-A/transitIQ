@@ -7,6 +7,7 @@ import RecommendedRoutes from './components/RecommendedRoutes';
 import type { JourneyRoute, TransferJourney, NormalizedRoute } from './types/transit';
 import FloatingAIAssistant from './components/FloatingAIAssistant';
 import JourneyExplorer from './components/JourneyExplorer';
+import FullJourneyRoadmap from './components/FullJourneyRoadmap';
 import { GlobalAlertModal } from './components/GlobalAlertModal';
 import { normalizeRoutes } from './utils/routeNormalizer';
 
@@ -101,8 +102,9 @@ function App() {
   const [transferShapes, setTransferShapes] = useState<{leg1: [number, number][], leg2: [number, number][]} | null>(null);
   const [tripStops, setTripStops] = useState<TripStop[]>([]);
   const [transferStops, setTransferStops] = useState<{leg1: TripStop[], leg2: TripStop[]} | null>(null);
-  const [appView, setAppView] = useState<'planner' | 'explorer'>('planner');
+  const [appView, setAppView] = useState<'planner' | 'explorer' | 'roadmap' | 'details'>('planner');
   const [searchTime, setSearchTime] = useState<string | undefined>(undefined);
+  const [focusedLocation, setFocusedLocation] = useState<[number, number] | null>(null);
 
   const normalizedRoutes = useMemo(() => normalizeRoutes(journeyRoutes, transferRoutes), [journeyRoutes, transferRoutes]);
 
@@ -322,7 +324,24 @@ function App() {
 
         <section className={`flex flex-col lg:flex-row gap-6 min-h-[600px] lg:h-[80vh] ${appView === 'explorer' ? 'hidden' : ''}`}>
           <div className="w-full lg:w-[30%] flex flex-col gap-4 overflow-y-auto max-h-[80vh] pr-2 custom-scrollbar">
-            {journeyRoutes.length > 0 || transferRoutes.length > 0 || isLoading ? (
+            {appView === 'roadmap' && selectedRoute ? (
+              <div className="h-full bg-[#0a0a0a] rounded-2xl overflow-hidden border border-white/10 shadow-2xl flex flex-col">
+                <button 
+                  onClick={() => setAppView('planner')}
+                  className="m-4 flex items-center gap-2 text-sm font-medium text-white/60 hover:text-white transition-colors bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl w-fit"
+                >
+                  <ArrowLeft size={16} /> Back to Planner
+                </button>
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                  <FullJourneyRoadmap 
+                    route={selectedRoute} 
+                    tripStops={tripStops} 
+                    transferStops={transferStops} 
+                    onStationClick={(lat, lon) => setFocusedLocation([lat, lon])}
+                  />
+                </div>
+              </div>
+            ) : appView === 'details' || journeyRoutes.length > 0 || transferRoutes.length > 0 || isLoading ? (
               <div className="flex flex-col gap-4">
                 <button 
                   onClick={handleNewSearch}
@@ -336,6 +355,7 @@ function App() {
                   isLoading={isLoading} 
                   selectedRoute={selectedRoute}
                   onRouteSelect={handleRouteSelect}
+                  onOpenRoadmap={(r: any) => { handleRouteSelect(r); setAppView('roadmap'); }}
                   viewMode={appView === 'explorer' ? 'full' : 'journey'}
                   onViewModeChange={(mode: any) => setAppView(mode === 'full' ? 'explorer' : 'planner')}
                   onViewAll={() => setAppView('explorer')}
@@ -346,33 +366,37 @@ function App() {
                 <JourneyPlanner 
                   onSearch={(src, dst, time) => handleSearch(src.stop_name, dst.stop_name, time)} 
                   isLoading={isLoading} 
+
                   initialSource={sourceName || ''}
                   initialDestination={destinationName || ''}
                   initialTime={searchTime}
                 />
-                <FloatingAIAssistant 
-                  onSearch={handleSearch} 
-                  activeRoute={selectedRoute ? selectedRoute.originalData : null} 
-                  onRouteSelect={(r) => { setAppView('planner'); handleRouteSelect(r); }}
-                />
+                {appView === 'planner' && (
+                  <FloatingAIAssistant 
+                    onSearch={handleSearch} 
+                    activeRoute={selectedRoute} 
+                    onRouteSelect={(r) => { setAppView('details'); handleRouteSelect(r); }}
+                    tripStops={tripStops}
+                    transferStops={transferStops}
+                    onStationFocus={setFocusedLocation}
+                  />
+                )}
               </div>
             )}
           </div>
 
           <div className="w-full lg:w-[70%] flex flex-col relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
             <TransitMap 
-              sourcePosition={sourcePosition} 
-              destinationPosition={destinationPosition} 
-              sourceName={sourceName}
-              destinationName={destinationName}
-              selectedRoute={selectedRoute}
-              
+              sourcePosition={sourcePosition}
+              destinationPosition={destinationPosition}
               transferPosition={transferPosition}
               routeShape={routeShape}
               transferShapes={transferShapes}
-              viewMode={appView === 'explorer' ? 'full' : 'journey'}
+              sourceName={sourceName}
+              destinationName={destinationName}
               tripStops={tripStops}
               transferStops={transferStops}
+              focusedLocation={focusedLocation}
             />
           </div>
         </section>
@@ -381,8 +405,11 @@ function App() {
       {/* 4. Floating AI Assistant (Bottom Right) */}
       <FloatingAIAssistant 
         onSearch={handleSearch} 
-        activeRoute={selectedRoute ? selectedRoute.originalData : null} 
-        onRouteSelect={(r) => { setAppView('planner'); handleRouteSelect(r); }}
+        activeRoute={selectedRoute} 
+        onRouteSelect={(r) => { setAppView('details'); handleRouteSelect(r); }}
+        tripStops={tripStops}
+        transferStops={transferStops}
+        onStationFocus={setFocusedLocation}
       />
 
       {/* Global Alert Modal */}

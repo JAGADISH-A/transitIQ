@@ -6,6 +6,9 @@ interface RouteCardProps {
   route: NormalizedRoute;
   onClick: () => void;
   isHero?: boolean;
+  onCompare?: () => void;
+  onDetails?: () => void;
+  onRoadmap?: () => void;
 }
 
 const MODE_MAP: Record<string, string> = {
@@ -32,7 +35,7 @@ const toTitleCase = (str: string) => {
   );
 };
 
-export const RouteCard: React.FC<RouteCardProps> = ({ route, onClick, isHero = false }) => {
+export const RouteCard: React.FC<RouteCardProps> = ({ route, onClick, isHero = false, onCompare, onDetails, onRoadmap }) => {
   if (!route) return null;
 
   const {
@@ -134,12 +137,32 @@ export const RouteCard: React.FC<RouteCardProps> = ({ route, onClick, isHero = f
         </div>
       </div>
 
-      {/* Row 4: Small Metadata Text */}
-      <div className="w-full mt-1">
+      <div className="w-full mt-1 flex items-center justify-between">
         <span className="text-[11px] font-medium text-zinc-500 uppercase tracking-widest">
           Runs Daily
         </span>
       </div>
+
+      {/* Compact Action Cluster */}
+      {(onCompare || onDetails || onRoadmap) && (
+        <div className="flex items-center gap-2 mt-1 pt-4 border-t border-white/5 w-full">
+          {onCompare && (
+            <button onClick={(e) => { e.stopPropagation(); onCompare(); }} className="text-xs px-3 py-1.5 rounded-lg bg-[#222] hover:bg-[#333] transition-colors text-white flex-1 text-center font-medium">
+              Compare
+            </button>
+          )}
+          {onDetails && (
+            <button onClick={(e) => { e.stopPropagation(); onDetails(); }} className="text-xs px-3 py-1.5 rounded-lg bg-[#222] hover:bg-[#333] transition-colors text-white flex-1 text-center font-medium">
+              Details
+            </button>
+          )}
+          {onRoadmap && (
+            <button onClick={(e) => { e.stopPropagation(); onRoadmap(); }} className="text-xs px-3 py-1.5 rounded-lg bg-[#FF4500]/10 hover:bg-[#FF4500]/20 border border-[#FF4500]/20 text-[#FF4500] transition-colors flex-1 text-center font-medium">
+              Journey Roadmap
+            </button>
+          )}
+        </div>
+      )}
     </button>
   );
 };

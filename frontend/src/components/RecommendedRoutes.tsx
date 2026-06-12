@@ -10,6 +10,7 @@ interface RecommendedRoutesProps {
   isLoading?: boolean;
   selectedRoute?: NormalizedRoute | null;
   onRouteSelect?: (route: NormalizedRoute | null) => void;
+  onOpenRoadmap?: (route: NormalizedRoute) => void;
   viewMode?: 'journey' | 'full';
   onViewModeChange?: (mode: 'journey' | 'full') => void;
   onViewAll?: () => void;
@@ -20,6 +21,7 @@ export default function RecommendedRoutes({
   isLoading = false, 
   selectedRoute = null, 
   onRouteSelect,
+  onOpenRoadmap,
   onViewAll
 }: RecommendedRoutesProps) {
 
@@ -103,6 +105,8 @@ export default function RecommendedRoutes({
                   route={recommendedRoute}
                   isHero={true}
                   onClick={() => onRouteSelect?.(recommendedRoute)}
+                  onDetails={() => onRouteSelect?.(recommendedRoute)}
+                  onRoadmap={() => onOpenRoadmap?.(recommendedRoute)}
                 />
               </div>
             )}
@@ -118,6 +122,8 @@ export default function RecommendedRoutes({
                         key={route.id}
                         route={route}
                         onClick={() => onRouteSelect?.(route)}
+                        onDetails={() => onRouteSelect?.(route)}
+                        onRoadmap={() => onOpenRoadmap?.(route)}
                       />
                     );
                   })}
@@ -147,6 +153,7 @@ export default function RecommendedRoutes({
               <RouteDetail 
                 route={selectedRoute}
                 onBack={() => onRouteSelect?.(null)}
+                onOpenRoadmap={() => onOpenRoadmap?.(selectedRoute)}
               />
             ) : null}
           </motion.div>

@@ -83,7 +83,7 @@ export default function JourneyExplorer({
 
       // Mode Filter
       if (!filterMode.has('all')) {
-        let modes: string[] = [];
+        const modes: string[] = [];
         if (r.isTransfer) {
           const t = r.originalData as TransferJourney;
           modes.push(MODE_MAP[t.first_leg.feed] || 'Rail');
@@ -105,7 +105,7 @@ export default function JourneyExplorer({
 
   // 4. Sort Routes
   const displayRoutes = useMemo(() => {
-    let sorted = [...filteredRoutes];
+    const sorted = [...filteredRoutes];
     
     sorted.sort((a, b) => {
       if (sortBy === 'shortest_duration') {
