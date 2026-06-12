@@ -35,7 +35,9 @@ def parse_gtfs_time_to_display(gtfs_time_str: str | None) -> "DisplayTime | None
         display_time = f"{display_hour:02d}:{minutes:02d} {ampm}"
         
         return DisplayTime(display_time=display_time, day_offset=day_offset)
-    except ValueError:
+    except Exception as e:
+        import logging
+        logging.error(f"Error in parse_gtfs_time_to_display for {gtfs_time_str}: {repr(e)}")
         return None
 
 
@@ -908,6 +910,8 @@ class TransitService:
                         stops_between=stops_between,
                         departure_time=departure_time,
                         arrival_time=arrival_time,
+                        departure_display=parse_gtfs_time_to_display(departure_time),
+                        arrival_display=parse_gtfs_time_to_display(arrival_time),
                         duration_minutes=duration_minutes,
                         shape_id=shape_id,
                     )
@@ -945,210 +949,14 @@ class TransitService:
 
         return journeys
 
-    def get_trip_stops(self, feed_name: str, trip_id: str) -> list["TripStop"]:
-        """Return all stops for a given trip_id in chronological order."""
-        if not self.is_loaded:
-            raise RuntimeError("GTFS feeds are not loaded.")
-
-        if feed_name not in self._feeds:
-            raise ValueError(f"Feed '{feed_name}' not found.")
-
-        loader = self._feeds[feed_name]
-        stop_times = loader.stop_times
-        stops = loader.stops
-
-        if stop_times is None or stops is None:
-            raise RuntimeError(f"Missing GTFS data for feed '{feed_name}'.")
-
-        # Get stop_times for the trip
-        trip_st = stop_times[stop_times["trip_id"] == trip_id].copy()
-        if trip_st.empty:
-            raise ValueError(f"Trip '{trip_id}' not found or has no stops.")
-
-        # Ensure correct ordering
-        trip_st["stop_sequence"] = trip_st["stop_sequence"].astype(int)
-        trip_st = trip_st.sort_values(by="stop_sequence")
-
-        self.logger.info(
-            "Journey planner invoked: source_stop_id='%s', destination_stop_id='%s', departure_after='%s'",
-            source_stop_id,
-            destination_stop_id,
-            departure_after,
-        )
-
-        journeys: list[JourneyRoute] = []
-        seen_routes: set[tuple[str, str]] = set()  # (feed, route_id)
-
-        for feed_name, loader in self._feeds.items():
-            stop_times = loader.stop_times
-            trips = loader.trips
-            routes = loader.routes
-            stops = loader.stops
-
-            # Guard against missing data
-            if stop_times is None or trips is None or routes is None or stops is None:
-                self.logger.warning("Feed '%s' has missing GTFS tables, skipping", feed_name)
-                continue
-
-            if "stop_id" not in stop_times.columns:
-                self.logger.warning("Feed '%s' stop_times missing 'stop_id' column, skipping", feed_name)
-                continue
-
-            # Find trips serving the source
-            source_st = stop_times[stop_times["stop_id"] == source_stop_id]
-            if source_st.empty:
-                self.logger.debug("Feed '%s': source stop '%s' not found", feed_name, source_stop_id)
-                continue
-
-            # Find trips serving the destination
-            dest_st = stop_times[stop_times["stop_id"] == destination_stop_id]
-            if dest_st.empty:
-                self.logger.debug("Feed '%s': destination stop '%s' not found", feed_name, destination_stop_id)
-                continue
-
-            # Merge to find common trips where source comes before destination
-            common = source_st.merge(
-                dest_st,
-                on="trip_id",
-                suffixes=("_source", "_dest"),
-            )
-
-            if common.empty:
-                self.logger.debug("Feed '%s': no common trips between '%s' and '%s'", feed_name, source_stop_id, destination_stop_id)
-                continue
-
-            # Filter for valid direction (source before destination)
-            valid_trips = common[
-                common["stop_sequence_source"].astype(int) < common["stop_sequence_dest"].astype(int)
-            ]
-
-            if valid_trips.empty:
-                self.logger.debug("Feed '%s': common trips exist but none in correct direction", feed_name)
-                continue
-
-            if "departure_time_source" in valid_trips.columns:
-                if departure_after:
-                    dep_after_pad = departure_after.strip().zfill(8)
-                    dt_series = valid_trips["departure_time_source"].astype(str).str.strip().str.zfill(8)
-                    valid_trips = valid_trips[dt_series >= dep_after_pad]
-                
-                if valid_trips.empty:
-                    self.logger.debug("Feed '%s': trips found but none matched departure_after", feed_name)
-                    continue
-                    
-                valid_trips = valid_trips.sort_values(by="departure_time_source")
-
-            # Fetch stop names
-            source_stop_row = stops[stops["stop_id"] == source_stop_id]
-            dest_stop_row = stops[stops["stop_id"] == destination_stop_id]
-            s_name = source_stop_row.iloc[0]["stop_name"] if not source_stop_row.empty else source_stop_id
-            d_name = dest_stop_row.iloc[0]["stop_name"] if not dest_stop_row.empty else destination_stop_id
-
-            feed_match_count = 0
-            for _, row in valid_trips.iterrows():
-                trip_id = row["trip_id"]
-                stops_between = int(row["stop_sequence_dest"]) - int(row["stop_sequence_source"])
-
-                # Look up route
-                trip_row = trips[trips["trip_id"] == trip_id]
-                if trip_row.empty:
-                    continue
-                route_id = str(trip_row.iloc[0]["route_id"])
-
-                # Deduplicate: one entry per (feed, route_id)
-                dedupe_key = (feed_name, route_id)
-                if dedupe_key in seen_routes:
-                    continue
-                seen_routes.add(dedupe_key)
-
-                route_row = routes[routes["route_id"] == route_id]
-                if route_row.empty:
-                    continue
-
-                r_short = route_row.iloc[0].get("route_short_name", "")
-                r_long = route_row.iloc[0].get("route_long_name", "")
-                route_name = str(r_long) if pd.notna(r_long) and r_long else str(r_short)
-
-                shape_id_val = trip_row.iloc[0].get("shape_id")
-                shape_id = str(shape_id_val) if pd.notna(shape_id_val) and str(shape_id_val).strip() else None
-
-                departure_time = str(row.get("departure_time_source", ""))
-                if pd.isna(row.get("departure_time_source")) or not departure_time.strip() or departure_time == "nan":
-                    departure_time = None
-
-                arrival_time = str(row.get("arrival_time_dest", ""))
-                if pd.isna(row.get("arrival_time_dest")) or not arrival_time.strip() or arrival_time == "nan":
-                    arrival_time = str(row.get("departure_time_dest", ""))
-                    if pd.isna(row.get("departure_time_dest")) or not arrival_time.strip() or arrival_time == "nan":
-                        arrival_time = None
-
-                duration_minutes = None
-                if departure_time and arrival_time:
-                    try:
-                        dh, dm, ds = map(int, departure_time.split(':'))
-                        ah, am, _ = map(int, arrival_time.split(':'))
-                        d_total = dh * 60 + dm
-                        a_total = ah * 60 + am
-                        duration_minutes = a_total - d_total
-                    except (ValueError, AttributeError):
-                        pass
-
-                journeys.append(
-                    JourneyRoute(
-                        feed=feed_name,
-                        trip_id=str(trip_id),
-                        route_id=route_id,
-                        route_name=route_name,
-                        source_stop=str(s_name),
-                        destination_stop=str(d_name),
-                        stops_between=stops_between,
-                        departure_time=departure_time,
-                        arrival_time=arrival_time,
-                        departure_display=parse_gtfs_time_to_display(departure_time),
-                        arrival_display=parse_gtfs_time_to_display(arrival_time),
-                        duration_minutes=duration_minutes,
-                        shape_id=shape_id,
-                    )
-                )
-                feed_match_count += 1
-
-                self.logger.info(
-                    "  [%s] route '%s' (%s) — %d stops between %s → %s",
-                    feed_name,
-                    route_name,
-                    route_id,
-                    stops_between,
-                    s_name,
-                    d_name,
-                )
-
-            self.logger.info(
-                "Feed '%s': %d unique route(s) found for %s → %s",
-                feed_name,
-                feed_match_count,
-                source_stop_id,
-                destination_stop_id,
-            )
-
-        self.logger.info(
-            "Journey search complete: source='%s', destination='%s', departure_after='%s', total_routes=%d",
-            source_stop_id,
-            destination_stop_id,
-            departure_after,
-            len(journeys),
-        )
-
-        journeys.sort(key=lambda j: j.departure_time if j.departure_time is not None else "99:99:99")
-
-        return journeys
-
     def find_transfer_routes(self, source_stop_id: str, destination_stop_id: str, departure_after: str | None = None) -> list["TransferJourney"]:
         """Find one-transfer trips between two stops across all loaded feeds."""
         from app.models.schemas import JourneyRoute, TransferJourney, JourneyType, DisplayTime
         import pandas as pd
 
         transfer_journeys: list[TransferJourney] = []
-        MAX_TRANSFER_CANDIDATES = 100
+        MAX_TRANSFER_CANDIDATES = 200  # Generate more candidates for better sorting
+        MAX_RETURNED_ROUTES = 30
 
         self.logger.info("TRANSFER SEARCH START")
         
@@ -1232,7 +1040,7 @@ class TransitService:
             source_name = source_name_row.iloc[0]["stop_name"] if not source_name_row.empty else source_stop_id
             dest_name = dest_name_row.iloc[0]["stop_name"] if not dest_name_row.empty else destination_stop_id
 
-            seen_transfer_pairs: set[tuple[str, str, str]] = set() # (transfer_stop, first_route, second_route)
+            seen_transfer_pairs: set[tuple[str, str, str]] = set() # (first_trip, second_trip, transfer_stop)
             
             for t_stop_id in actual_transfer_stops:
                 # Find arrival times at t_stop_id for first leg
@@ -1323,7 +1131,7 @@ class TransitService:
                                 continue
 
                         
-                        dedupe_key = (t_stop_id, first_route_id, second_route_id)
+                        dedupe_key = (str(first_trip_id), str(second_trip_id), str(t_stop_id))
                         if dedupe_key in seen_transfer_pairs:
                             continue
                         
@@ -1406,6 +1214,9 @@ class TransitService:
             j.transfer_wait,
             j.total_duration
         ))
+        
+        # Take the top N after sorting
+        transfer_journeys = transfer_journeys[:MAX_RETURNED_ROUTES]
 
         self.logger.info("Current system time: %s", departure_after)
         self.logger.info("Total transfer candidates generated: %d", stats_candidates_generated)

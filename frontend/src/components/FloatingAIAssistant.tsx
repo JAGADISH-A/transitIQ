@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Sparkles, X, Send, Loader2, Train, AlertTriangle } from 'lucide-react';
 
-import { JourneyNarrative, JourneyContext, IntentType, JourneyRoute } from '../App';
+import type { JourneyNarrative, JourneyContext, JourneyRoute } from '../types/transit';
 
 type MessageType = 'text' | 'searching' | 'result' | 'error' | 'not-found';
 
@@ -71,7 +71,6 @@ const AssistantCard = React.memo(({ msg }: { msg: Message }) => {
   }
 
   if (msg.type === 'result') {
-    const total = (msg.directCount || 0) + (msg.transferCount || 0);
     return (
       <div className="flex items-start gap-3 max-w-[85%]">
         <div className="w-6 h-6 rounded bg-[#FF4500] flex items-center justify-center shrink-0 mt-0.5">
@@ -277,35 +276,7 @@ export default function FloatingAIAssistant({ onSearch, activeRoute }: FloatingA
         const to = dst || 'your destination';
 
         // Top routes for comparison memory
-        let comp = sessionContext?.previous_comparison || undefined;
-        const bestRoute = r.topDirectRoute;
-        const bestTransfer = r.topTransferRoute;
-        let duration = 0;
-        let tcount = 0;
-        let cls = "Acceptable";
-        
-        if (bestRoute && bestTransfer) {
-           if ((bestRoute.quality?.score || 0) >= (bestTransfer.quality?.score || 0)) {
-               duration = bestRoute.duration_minutes || 0;
-               cls = bestRoute.quality?.classification || "Acceptable";
-           } else {
-               duration = bestTransfer.total_duration;
-               tcount = 1;
-               cls = bestTransfer.quality?.classification || "Acceptable";
-           }
-        } else if (bestRoute) {
-           duration = bestRoute.duration_minutes || 0;
-           cls = bestRoute.quality?.classification || "Acceptable";
-        } else if (bestTransfer) {
-           duration = bestTransfer.total_duration;
-           tcount = 1;
-           cls = bestTransfer.quality?.classification || "Acceptable";
-        }
-        
-        if (duration > 0) {
-           comp = { duration_minutes: duration, transfer_count: tcount, quality_classification: cls };
-        }
-
+        const comp = sessionContext?.previous_comparison || undefined;
         // Update context
         setSessionContext(prev => ({
            ...prev,

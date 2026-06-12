@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import type { TripStop } from '../../App';
+import type { TripStop } from '../../types/transit';
 
 interface TransitMapProps {
   sourcePosition?: [number, number];
@@ -67,6 +67,7 @@ export default function TransitMap({
   transferPosition,
   sourceName = "Source",
   destinationName = "Destination",
+  selectedRoute,
   selectedTransferRoute,
   routeShape,
   transferShapes,
@@ -77,21 +78,33 @@ export default function TransitMap({
   // If neither is provided, center somewhere default (e.g., Chennai)
   const defaultCenter: [number, number] = [13.0827, 80.2707];
   
+  console.log("MAP INPUT routeShape", routeShape);
+  console.log("MAP INPUT tripStops length", tripStops?.length);
+  
   const activePoints: [number, number][] = [];
   if (sourcePosition) activePoints.push(sourcePosition);
   if (destinationPosition) activePoints.push(destinationPosition);
   if (transferPosition) activePoints.push(transferPosition);
 
+  const fallbackRouteShape = useMemo(() => {
+    if (routeShape && routeShape.length > 0) return routeShape;
+    if (tripStops && tripStops.length > 0) {
+      return tripStops.filter(s => s.stop_lat && s.stop_lon).map(s => [s.stop_lat, s.stop_lon] as [number, number]);
+    }
+    return null;
+  }, [routeShape, tripStops]);
+
   const routeSegments = useMemo(() => {
-    if (!routeShape || routeShape.length === 0) return { full: null, journey: null };
-    if (!sourcePosition || !destinationPosition) return { full: routeShape, journey: routeShape };
+    const shapeToUse = fallbackRouteShape;
+    if (!shapeToUse || shapeToUse.length === 0) return { full: null, journey: null };
+    if (!sourcePosition || !destinationPosition) return { full: shapeToUse, journey: shapeToUse };
 
     let minSourceDist = Infinity;
     let sourceIdx = 0;
     let minDestDist = Infinity;
     let destIdx = 0;
     
-    routeShape.forEach((pt, idx) => {
+    shapeToUse.forEach((pt, idx) => {
       const dSource = Math.pow(pt[0] - sourcePosition[0], 2) + Math.pow(pt[1] - sourcePosition[1], 2);
       const dDest = Math.pow(pt[0] - destinationPosition[0], 2) + Math.pow(pt[1] - destinationPosition[1], 2);
       if (dSource < minSourceDist) { minSourceDist = dSource; sourceIdx = idx; }
@@ -102,10 +115,10 @@ export default function TransitMap({
     const end = Math.max(sourceIdx, destIdx);
     
     return {
-      full: routeShape,
-      journey: routeShape.slice(start, end + 1)
+      full: shapeToUse,
+      journey: shapeToUse.slice(start, end + 1)
     };
-  }, [routeShape, sourcePosition, destinationPosition]);
+  }, [fallbackRouteShape, sourcePosition, destinationPosition]);
 
   const transferSegments = useMemo(() => {
     if (!transferShapes) return { leg1: null, leg2: null };
@@ -272,17 +285,17 @@ export default function TransitMap({
         )}
 
         {/* Intermediate Stop Markers */}
-        {tripStops && tripStops.length > 0 && renderStops(tripStops, sourceName || '', destinationName || '')}
+        {tripStops && tripStops.length > 0 && renderStops(tripStops, selectedRoute?.sourceName || sourceName || '', selectedRoute?.destName || destinationName || '')}
         
-        {transferStops?.leg1 && transferStops.leg1.length > 0 && renderStops(transferStops.leg1, sourceName || '', selectedTransferRoute?.transfer_stop || '', '#F97316')}
+        {transferStops?.leg1 && transferStops.leg1.length > 0 && renderStops(transferStops.leg1, selectedRoute?.sourceName || sourceName || '', selectedTransferRoute?.transfer_stop || '', '#F97316')}
         
-        {transferStops?.leg2 && transferStops.leg2.length > 0 && renderStops(transferStops.leg2, selectedTransferRoute?.transfer_stop || '', destinationName || '', '#10B981')}
+        {transferStops?.leg2 && transferStops.leg2.length > 0 && renderStops(transferStops.leg2, selectedTransferRoute?.transfer_stop || '', selectedRoute?.destName || destinationName || '', '#10B981')}
 
         {sourcePosition && (
           <Marker position={sourcePosition} icon={createCustomIcon('#097752ff', 16)}>
             <Popup className="transit-popup">
               <div className="font-sans">
-                <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                <div className="text-xs font-medium text-zinc-500 mb-1">
                   Source
                 </div>
                 <div className="font-semibold text-gray-900">
@@ -297,7 +310,7 @@ export default function TransitMap({
           <Marker position={destinationPosition} icon={createCustomIcon('#EF4444', 16)}>
             <Popup className="transit-popup">
               <div className="font-sans">
-                <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                <div className="text-xs font-medium text-zinc-500 mb-1">
                   Destination
                 </div>
                 <div className="font-semibold text-gray-900">
@@ -312,7 +325,7 @@ export default function TransitMap({
           <Marker position={transferPosition} icon={createCustomIcon('#F59E0B', 14)}>
             <Popup className="transit-popup">
               <div className="font-sans">
-                <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                <div className="text-xs font-medium text-zinc-500 mb-1">
                   Transfer Station
                 </div>
                 <div className="font-semibold text-gray-900">

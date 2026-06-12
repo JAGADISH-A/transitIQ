@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import Header from './components/Header';
 import JourneyPlanner from './components/JourneyPlanner';
 import TransitMap from './components/map/TransitMap';
 import RecommendedRoutes from './components/RecommendedRoutes';
+import type { JourneyRoute, TransferJourney, NormalizedRoute } from './types/transit';
 import FloatingAIAssistant from './components/FloatingAIAssistant';
 import JourneyExplorer from './components/JourneyExplorer';
 import { GlobalAlertModal } from './components/GlobalAlertModal';
+import { normalizeRoutes } from './utils/routeNormalizer';
 
 interface StopResult {
   stop_id: string;
@@ -65,33 +67,6 @@ export interface JourneyQuality {
   route_flags: string[];
 }
 
-export interface JourneyRoute {
-  feed: string;
-  trip_id: string;
-  route_id: string;
-  route_name: string;
-  source_stop: string;
-  destination_stop: string;
-  stops_between: number;
-  departure_time?: string;
-  arrival_time?: string;
-  departure_display?: DisplayTime;
-  arrival_display?: DisplayTime;
-  duration_minutes?: number;
-  shape_id?: string;
-  quality?: JourneyQuality;
-}
-
-interface TransferJourney {
-  journey_type: "TRANSFER";
-  transfer_stop: string;
-  first_leg: JourneyRoute;
-  second_leg: JourneyRoute;
-  total_duration: number;
-  transfer_wait: number;
-  quality?: JourneyQuality;
-}
-
 interface JourneyResponse {
   success: boolean;
   narrative?: JourneyNarrative;
@@ -121,15 +96,15 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [journeyRoutes, setJourneyRoutes] = useState<JourneyRoute[]>([]);
   const [transferRoutes, setTransferRoutes] = useState<TransferJourney[]>([]);
-  const [selectedRoute, setSelectedRoute] = useState<JourneyRoute | null>(null);
-  const [selectedTransferRoute, setSelectedTransferRoute] = useState<TransferJourney | null>(null);
+  const [selectedRoute, setSelectedRoute] = useState<NormalizedRoute | null>(null);
   const [routeShape, setRouteShape] = useState<[number, number][] | null>(null);
   const [transferShapes, setTransferShapes] = useState<{leg1: [number, number][], leg2: [number, number][]} | null>(null);
   const [tripStops, setTripStops] = useState<TripStop[]>([]);
   const [transferStops, setTransferStops] = useState<{leg1: TripStop[], leg2: TripStop[]} | null>(null);
-  const [viewMode, setViewMode] = useState<'journey' | 'full'>('journey');
   const [appView, setAppView] = useState<'planner' | 'explorer'>('planner');
   const [searchTime, setSearchTime] = useState<string | undefined>(undefined);
+
+  const normalizedRoutes = useMemo(() => normalizeRoutes(journeyRoutes, transferRoutes), [journeyRoutes, transferRoutes]);
 
   const fetchTripStops = async (feed: string, trip_id: string) => {
     try {
@@ -158,9 +133,8 @@ function App() {
     }
   };
 
-  const handleRouteSelect = async (route: JourneyRoute | null) => {
+  const handleRouteSelect = async (route: NormalizedRoute | null) => {
     setSelectedRoute(route);
-    setSelectedTransferRoute(null);
     setRouteShape(null);
     setTransferShapes(null);
     setTripStops([]);
@@ -169,78 +143,70 @@ function App() {
 
     if (!route) return;
 
-    fetchTripStops(route.feed, route.trip_id);
-    if (route.shape_id) {
-      const shape = await fetchRouteShape(route.feed, route.shape_id);
-      if (shape) setRouteShape(shape);
-    }
-  };
-
-  const handleTransferRouteSelect = async (route: TransferJourney | null) => {
-    setSelectedTransferRoute(route);
-    setSelectedRoute(null);
-    setRouteShape(null);
-    setTransferShapes(null);
-    setTripStops([]);
-    setTransferStops(null);
-    setTransferPosition(undefined);
-
-    if (!route) return;
-
-    try {
-      const res = await fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(route.transfer_stop)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.results && data.results.length > 0) {
-          setTransferPosition([data.results[0].lat, data.results[0].lon]);
+    if (route.isTransfer) {
+      const tRoute = route.originalData as TransferJourney;
+      try {
+        const res = await fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(tRoute.transfer_stop)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.results && data.results.length > 0) {
+            setTransferPosition([data.results[0].lat, data.results[0].lon]);
+          }
         }
+      } catch (err) {
+        console.error('Error fetching transfer stop:', err);
       }
-    } catch (err) {
-      console.error('Error fetching transfer stop:', err);
-    }
 
-    let leg1Shape = null;
-    let leg2Shape = null;
+      let leg1Shape = null;
+      let leg2Shape = null;
 
-    if (route.first_leg.shape_id) {
-      leg1Shape = await fetchRouteShape(route.first_leg.feed, route.first_leg.shape_id);
-    }
-    if (route.second_leg.shape_id) {
-      leg2Shape = await fetchRouteShape(route.second_leg.feed, route.second_leg.shape_id);
-    }
-
-    if (leg1Shape || leg2Shape) {
-      setTransferShapes({
-        leg1: leg1Shape || [],
-        leg2: leg2Shape || []
-      });
-    }
-
-    let leg1Stops: TripStop[] = [];
-    let leg2Stops: TripStop[] = [];
-
-    try {
-      const res1 = await fetch(`http://localhost:8000/trips/${route.first_leg.feed}/${route.first_leg.trip_id}/stops`);
-      if (res1.ok) {
-        const d = await res1.json();
-        leg1Stops = d.stops || [];
+      if (tRoute.first_leg.shape_id) {
+        leg1Shape = await fetchRouteShape(tRoute.first_leg.feed, tRoute.first_leg.shape_id);
       }
-      const res2 = await fetch(`http://localhost:8000/trips/${route.second_leg.feed}/${route.second_leg.trip_id}/stops`);
-      if (res2.ok) {
-        const d = await res2.json();
-        leg2Stops = d.stops || [];
+      if (tRoute.second_leg.shape_id) {
+        leg2Shape = await fetchRouteShape(tRoute.second_leg.feed, tRoute.second_leg.shape_id);
       }
-    } catch (err) {
-      console.error('Error fetching transfer trip stops:', err);
+
+      if (leg1Shape || leg2Shape) {
+        setTransferShapes({
+          leg1: leg1Shape || [],
+          leg2: leg2Shape || []
+        });
+      }
+
+      let leg1Stops: TripStop[] = [];
+      let leg2Stops: TripStop[] = [];
+
+      try {
+        const res1 = await fetch(`http://localhost:8000/trips/${tRoute.first_leg.feed}/${tRoute.first_leg.trip_id}/stops`);
+        if (res1.ok) {
+          const d = await res1.json();
+          leg1Stops = d.stops || [];
+        }
+        const res2 = await fetch(`http://localhost:8000/trips/${tRoute.second_leg.feed}/${tRoute.second_leg.trip_id}/stops`);
+        if (res2.ok) {
+          const d = await res2.json();
+          leg2Stops = d.stops || [];
+        }
+      } catch (err) {
+        console.error('Error fetching transfer trip stops:', err);
+      }
+      setTransferStops({ leg1: leg1Stops, leg2: leg2Stops });
+    } else {
+      const dRoute = route.originalData as JourneyRoute;
+      fetchTripStops(dRoute.feed, dRoute.trip_id);
+      if (dRoute.shape_id) {
+        const shape = await fetchRouteShape(dRoute.feed, dRoute.shape_id);
+        if (shape) setRouteShape(shape);
+      }
     }
-    setTransferStops({ leg1: leg1Stops, leg2: leg2Stops });
   };
 
+  
   const handleNewSearch = () => {
     setJourneyRoutes([]);
     setTransferRoutes([]);
     setSelectedRoute(null);
-    setSelectedTransferRoute(null);
     setRouteShape(null);
     setTransferShapes(null);
     setTripStops([]);
@@ -254,7 +220,6 @@ function App() {
     setJourneyRoutes([]);
     setTransferRoutes([]);
     setSelectedRoute(null);
-    setSelectedTransferRoute(null);
     setRouteShape(null);
     setTransferShapes(null);
     setTripStops([]);
@@ -341,19 +306,13 @@ function App() {
         {appView === 'explorer' ? (
           <div className="absolute inset-0 z-50 bg-[#0F0F0F]">
             <JourneyExplorer
-              routes={journeyRoutes}
-              transferRoutes={transferRoutes}
+              routes={normalizedRoutes}
               sourceName={sourceName || ''}
               destinationName={destinationName || ''}
-              departureAfter={searchTime}
               onBack={() => setAppView('planner')}
               onRouteSelect={(route) => {
                 setAppView('planner');
                 handleRouteSelect(route);
-              }}
-              onTransferRouteSelect={(route) => {
-                setAppView('planner');
-                handleTransferRouteSelect(route);
               }}
             />
           </div>
@@ -371,27 +330,27 @@ function App() {
                   Back
                 </button>
                 <RecommendedRoutes 
-                  routes={journeyRoutes} 
-                  transferRoutes={transferRoutes}
+                  routes={normalizedRoutes} 
                   isLoading={isLoading} 
                   selectedRoute={selectedRoute}
-                  selectedTransferRoute={selectedTransferRoute}
                   onRouteSelect={handleRouteSelect}
-                  onTransferRouteSelect={handleTransferRouteSelect}
-                  viewMode={viewMode}
-                  onViewModeChange={setViewMode}
+                  viewMode={appView === 'explorer' ? 'full' : 'journey'}
+                  onViewModeChange={(mode: any) => setAppView(mode === 'full' ? 'explorer' : 'planner')}
                   onViewAll={() => setAppView('explorer')}
-                  tripStops={tripStops}
                 />
               </div>
             ) : (
               <div className="flex flex-col gap-4">
                 <JourneyPlanner 
-                  onSearch={handleSearch} 
+                  onSearch={(src, dst, time) => handleSearch(src.stop_name, dst.stop_name, time)} 
                   isLoading={isLoading} 
                   initialSource={sourceName || ''}
                   initialDestination={destinationName || ''}
                   initialTime={searchTime}
+                />
+                <FloatingAIAssistant 
+                  onSearch={handleSearch} 
+                  activeRoute={selectedRoute ? selectedRoute.originalData : null} 
                 />
               </div>
             )}
@@ -404,11 +363,11 @@ function App() {
               sourceName={sourceName}
               destinationName={destinationName}
               selectedRoute={selectedRoute}
-              selectedTransferRoute={selectedTransferRoute}
+              
               transferPosition={transferPosition}
               routeShape={routeShape}
               transferShapes={transferShapes}
-              viewMode={viewMode}
+              viewMode={appView === 'explorer' ? 'full' : 'journey'}
               tripStops={tripStops}
               transferStops={transferStops}
             />
@@ -417,7 +376,10 @@ function App() {
       </main>
 
       {/* 4. Floating AI Assistant (Bottom Right) */}
-      <FloatingAIAssistant onSearch={handleSearch} activeRoute={selectedRoute || selectedTransferRoute} />
+      <FloatingAIAssistant 
+        onSearch={handleSearch} 
+        activeRoute={selectedRoute ? selectedRoute.originalData : null} 
+      />
 
       {/* Global Alert Modal */}
       <GlobalAlertModal

@@ -1,5 +1,6 @@
 """Journey planner API endpoint."""
 import logging
+from datetime import datetime
 from app.models.schemas import JourneyResponse, TripStopsResponse
 from fastapi import APIRouter, Query, HTTPException
 from app.services.transit_service import transit_service

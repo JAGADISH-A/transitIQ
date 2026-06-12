@@ -51,7 +51,7 @@ function WheelColumn({ items, selectedValue, onChange, width = "w-16" }: WheelCo
             <div 
               key={item} 
               className={`h-[40px] snap-center flex items-center justify-center transition-colors duration-200 cursor-pointer ${
-                isSelected ? 'text-[#FF4500] scale-110 font-bold' : 'text-white/40 scale-100 hover:text-white/60'
+                isSelected ? 'text-zinc-200 scale-110 font-medium' : 'text-zinc-600 scale-100 hover:text-zinc-400'
               }`}
               onClick={() => {
                 if (scrollRef.current) {
@@ -137,7 +137,7 @@ export default function WheelTimePicker({
       {/* Columns */}
       <div className="flex items-center gap-4 z-20">
         <WheelColumn items={hours} selectedValue={hour} onChange={setHour} width="w-12" />
-        <span className="text-white/40 font-bold text-xl -translate-y-[2px] animate-pulse">:</span>
+        <span className="text-zinc-600 font-medium text-lg -translate-y-[2px] animate-pulse">:</span>
         <WheelColumn items={minutes} selectedValue={minute} onChange={setMinute} width="w-12" />
         <div className="w-4"></div> {/* Spacer */}
         <WheelColumn items={ampms} selectedValue={ampm} onChange={setAmpm} width="w-14" />

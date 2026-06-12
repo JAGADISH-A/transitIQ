@@ -1,13 +1,25 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { MapPin, Navigation, ArrowDownUp, Clock, Search, Loader2 } from 'lucide-react';
 import WheelTimePicker from './WheelTimePicker';
+import type { StopResult, SearchResponse } from '../types/transit';
 
 interface JourneyPlannerProps {
-  onSearch: (source: string, destination: string, departureTime?: string) => void;
+  onSearch: (source: StopResult, destination: StopResult, departureTime?: string) => void;
   isLoading?: boolean;
   initialSource?: string;
   initialDestination?: string;
   initialTime?: string;
+}
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
 }
 
 export default function JourneyPlanner({ 
@@ -17,24 +29,105 @@ export default function JourneyPlanner({
   initialDestination = '',
   initialTime
 }: JourneyPlannerProps) {
-  const [source, setSource] = useState(initialSource);
-  const [destination, setDestination] = useState(initialDestination);
+  // Source State
+  const [sourceQuery, setSourceQuery] = useState(initialSource);
+  const [selectedSource, setSelectedSource] = useState<StopResult | null>(null);
+  const [sourceSuggestions, setSourceSuggestions] = useState<StopResult[]>([]);
+  const [isSourceFocused, setIsSourceFocused] = useState(false);
+  const debouncedSourceQuery = useDebounce(sourceQuery, 300);
+
+  // Destination State
+  const [destQuery, setDestQuery] = useState(initialDestination);
+  const [selectedDest, setSelectedDest] = useState<StopResult | null>(null);
+  const [destSuggestions, setDestSuggestions] = useState<StopResult[]>([]);
+  const [isDestFocused, setIsDestFocused] = useState(false);
+  const debouncedDestQuery = useDebounce(destQuery, 300);
   
-  // if initialTime is set, parse it. It's in "HH:MM:SS" format or undefined.
+  // Time State
   const parsedTime = initialTime ? initialTime.slice(0, 5) : '';
   const [timeMode, setTimeMode] = useState<'now' | 'custom'>(initialTime ? 'custom' : 'now');
   const [customTime, setCustomTime] = useState<string>(parsedTime);
 
+  // Fetch Source Suggestions
+  useEffect(() => {
+    if (debouncedSourceQuery.length >= 2 && (!selectedSource || selectedSource.stop_name !== debouncedSourceQuery)) {
+      fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(debouncedSourceQuery)}`)
+        .then(res => res.json())
+        .then((data: SearchResponse) => {
+          setSourceSuggestions(data.results || []);
+        })
+        .catch(err => console.error('Error fetching source stops:', err));
+    } else {
+      setSourceSuggestions([]);
+    }
+  }, [debouncedSourceQuery, selectedSource]);
+
+  // Fetch Destination Suggestions
+  useEffect(() => {
+    if (debouncedDestQuery.length >= 2 && (!selectedDest || selectedDest.stop_name !== debouncedDestQuery)) {
+      fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(debouncedDestQuery)}`)
+        .then(res => res.json())
+        .then((data: SearchResponse) => {
+          setDestSuggestions(data.results || []);
+        })
+        .catch(err => console.error('Error fetching destination stops:', err));
+    } else {
+      setDestSuggestions([]);
+    }
+  }, [debouncedDestQuery, selectedDest]);
+
   const handleSearch = () => {
-    if (source.trim() && destination.trim()) {
+    let finalSource = selectedSource;
+    let finalDest = selectedDest;
+
+    // Fallback Matching if user didn't click an autocomplete option
+    if (!finalSource && sourceSuggestions.length > 0) {
+      finalSource = sourceSuggestions[0];
+      setSelectedSource(finalSource);
+      setSourceQuery(finalSource.stop_name);
+    }
+    
+    if (!finalDest && destSuggestions.length > 0) {
+      finalDest = destSuggestions[0];
+      setSelectedDest(finalDest);
+      setDestQuery(finalDest.stop_name);
+    }
+
+    if (finalSource && finalDest) {
       let timeToSend: string | undefined = undefined;
       if (timeMode === 'custom' && customTime) {
-        // Ensure format HH:MM:SS
         timeToSend = customTime.length === 5 ? customTime + ":00" : customTime;
       }
-      onSearch(source, destination, timeToSend);
+      onSearch(finalSource, finalDest, timeToSend);
     }
   };
+
+  const handleSwap = () => {
+    const tempQuery = sourceQuery;
+    const tempSelected = selectedSource;
+    
+    setSourceQuery(destQuery);
+    setSelectedSource(selectedDest);
+    
+    setDestQuery(tempQuery);
+    setSelectedDest(tempSelected);
+  };
+
+  const sourceRef = useRef<HTMLDivElement>(null);
+  const destRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (sourceRef.current && !sourceRef.current.contains(event.target as Node)) {
+        setIsSourceFocused(false);
+      }
+      if (destRef.current && !destRef.current.contains(event.target as Node)) {
+        setIsDestFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   return (
     <div className="w-full h-full bg-[#1A1A1A] border border-white/10 rounded-2xl p-6 flex flex-col gap-6 shadow-xl">
@@ -44,10 +137,10 @@ export default function JourneyPlanner({
       </div>
 
       <div className="flex flex-col gap-4 relative mt-2">
-        {/* Connection line between inputs */}
         <div className="absolute left-5 top-[28px] bottom-[28px] w-[1px] bg-white/10 z-0 hidden sm:block"></div>
 
-        <div className="flex items-center gap-3 relative z-10">
+        {/* Source Autocomplete */}
+        <div className="flex items-center gap-3 relative z-30" ref={sourceRef}>
           <div className="w-10 h-10 rounded-full bg-[#0F0F0F] border border-white/10 flex items-center justify-center shrink-0">
             <MapPin size={18} className="text-white/70" />
           </div>
@@ -55,38 +148,78 @@ export default function JourneyPlanner({
             <input 
               type="text" 
               placeholder="Where are you starting?" 
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-              className="w-full bg-[#0F0F0F] border border-white/10 rounded-xl px-4 py-3.5 text-sm text-white focus:outline-none focus:border-[#FF4500]/50 focus:ring-1 focus:ring-[#FF4500]/50 transition-all placeholder:text-white/30"
+              value={sourceQuery}
+              onChange={(e) => {
+                setSourceQuery(e.target.value);
+                setSelectedSource(null);
+              }}
+              onFocus={() => setIsSourceFocused(true)}
+              className="w-full bg-[#0F0F0F] border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-white focus:outline-none focus:border-[#FF4500]/50 focus:ring-1 focus:ring-[#FF4500]/50 transition-all placeholder:text-white/30"
               disabled={isLoading}
             />
+            {isSourceFocused && sourceSuggestions.length > 0 && (
+              <div className="absolute top-[calc(100%+8px)] left-0 w-full bg-[#111111] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50">
+                {sourceSuggestions.map((stop) => (
+                  <button
+                    key={stop.stop_id}
+                    className="w-full text-left px-4 py-3 text-sm text-white/80 hover:bg-white/5 hover:text-white transition-colors border-b border-white/5 last:border-0"
+                    onClick={() => {
+                      setSelectedSource(stop);
+                      setSourceQuery(stop.stop_name);
+                      setIsSourceFocused(false);
+                    }}
+                  >
+                    {stop.stop_name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
         <button 
-          className="absolute left-[20px] top-1/2 -translate-y-1/2 -translate-x-1/2 w-7 h-7 rounded-full bg-[#2A2A2A] border border-white/10 flex items-center justify-center z-20 hover:bg-[#333333] transition-colors cursor-pointer text-white/70 hover:text-white hidden sm:flex"
-          onClick={() => {
-            setSource(destination);
-            setDestination(source);
-          }}
+          className="absolute left-[20px] top-1/2 -translate-y-1/2 -translate-x-1/2 w-7 h-7 rounded-full bg-[#2A2A2A] border border-white/10 flex items-center justify-center z-40 hover:bg-[#333333] transition-colors cursor-pointer text-white/70 hover:text-white hidden sm:flex"
+          onClick={handleSwap}
           disabled={isLoading}
         >
           <ArrowDownUp size={14} />
         </button>
 
-        <div className="flex items-center gap-3 relative z-10">
+        {/* Destination Autocomplete */}
+        <div className="flex items-center gap-3 relative z-20" ref={destRef}>
           <div className="w-10 h-10 rounded-full bg-[#0F0F0F] border border-[#FF4500]/30 flex items-center justify-center shrink-0">
-            <Navigation size={18} className="text-[#FF4500]" />
+            <Navigation size={18} className="text-zinc-400" />
           </div>
           <div className="w-full relative">
             <input 
               type="text" 
               placeholder="Where do you want to go?" 
-              value={destination}
-              onChange={(e) => setDestination(e.target.value)}
-              className="w-full bg-[#0F0F0F] border border-white/10 rounded-xl px-4 py-3.5 text-sm text-white focus:outline-none focus:border-[#FF4500]/50 focus:ring-1 focus:ring-[#FF4500]/50 transition-all placeholder:text-white/30"
+              value={destQuery}
+              onChange={(e) => {
+                setDestQuery(e.target.value);
+                setSelectedDest(null);
+              }}
+              onFocus={() => setIsDestFocused(true)}
+              className="w-full bg-[#0F0F0F] border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-white focus:outline-none focus:border-[#FF4500]/50 focus:ring-1 focus:ring-[#FF4500]/50 transition-all placeholder:text-white/30"
               disabled={isLoading}
             />
+            {isDestFocused && destSuggestions.length > 0 && (
+              <div className="absolute top-[calc(100%+8px)] left-0 w-full bg-[#111111] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50">
+                {destSuggestions.map((stop) => (
+                  <button
+                    key={stop.stop_id}
+                    className="w-full text-left px-4 py-3 text-sm text-white/80 hover:bg-white/5 hover:text-white transition-colors border-b border-white/5 last:border-0"
+                    onClick={() => {
+                      setSelectedDest(stop);
+                      setDestQuery(stop.stop_name);
+                      setIsDestFocused(false);
+                    }}
+                  >
+                    {stop.stop_name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -95,14 +228,14 @@ export default function JourneyPlanner({
         <div className="flex items-center gap-2">
           <button 
             onClick={() => setTimeMode('now')}
-            className={`flex-1 border rounded-xl px-4 py-3 text-sm flex items-center justify-center gap-2 transition-colors ${timeMode === 'now' ? 'bg-[#FF4500]/10 border-[#FF4500]/50 text-[#FF4500]' : 'bg-[#0F0F0F] border-white/10 text-white/70 hover:bg-[#2A2A2A]'}`}
+            className={`flex-1 border rounded-2xl px-4 py-3 text-sm flex items-center justify-center gap-2 transition-colors ${timeMode === 'now' ? 'bg-zinc-800 border-zinc-600 text-zinc-200' : 'bg-zinc-950 border-zinc-800 text-zinc-500 hover:bg-zinc-900'}`}
           >
             <Clock size={16} />
             <span>Leave now</span>
           </button>
           <button 
             onClick={() => setTimeMode('custom')}
-            className={`flex-1 border rounded-xl px-4 py-3 text-sm flex items-center justify-center gap-2 transition-colors ${timeMode === 'custom' ? 'bg-[#FF4500]/10 border-[#FF4500]/50 text-[#FF4500]' : 'bg-[#0F0F0F] border-white/10 text-white/70 hover:bg-[#2A2A2A]'}`}
+            className={`flex-1 border rounded-2xl px-4 py-3 text-sm flex items-center justify-center gap-2 transition-colors ${timeMode === 'custom' ? 'bg-zinc-800 border-zinc-600 text-zinc-200' : 'bg-zinc-950 border-zinc-800 text-zinc-500 hover:bg-zinc-900'}`}
           >
             <Clock size={16} />
             <span>Custom time</span>
@@ -123,8 +256,8 @@ export default function JourneyPlanner({
 
       <button 
         onClick={handleSearch}
-        disabled={isLoading || !source.trim() || !destination.trim()}
-        className="w-full mt-auto bg-[#FF4500] hover:bg-[#ff571a] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-xl py-3.5 flex items-center justify-center gap-2 transition-colors shadow-[0_0_20px_rgba(255,69,0,0.3)]"
+        disabled={isLoading || (!selectedSource && sourceQuery.trim() === '') || (!selectedDest && destQuery.trim() === '')}
+        className="w-full mt-auto bg-[#FF4500] hover:bg-[#ff571a] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-2xl py-3.5 flex items-center justify-center gap-2 transition-colors shadow-[0_0_20px_rgba(255,69,0,0.3)]"
       >
         {isLoading ? (
           <>

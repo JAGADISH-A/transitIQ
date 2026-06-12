@@ -1,4 +1,3 @@
-import React from 'react';
 import { Zap, RefreshCcw, AlertTriangle, Moon, Train } from 'lucide-react';
 
 interface RouteFlagsProps {
