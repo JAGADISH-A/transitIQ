@@ -77,7 +77,7 @@ To view the complete visual setup of TransitIQ, see the interface showcase below
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/route-results(2).png" width="900" alt="TransitIQ Route Results">
+  <img src="assets/screenshots/route-results (2).png" width="900" alt="TransitIQ Route Results(2)">
 </p>
 
 
