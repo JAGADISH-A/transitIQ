@@ -5,7 +5,7 @@ import re
 transit_service.load_all_feeds("data")
 agent_tools = TransitAgentTools()
 
-def test_fast_path(user_query):
+def run_fast_path(user_query):
     patterns_station = [
         re.compile(r"(?:search\s+stop|find\s+station)\s+(.+?)(?:\Z|\?|\.)", re.IGNORECASE)
     ]
@@ -32,4 +32,4 @@ def test_fast_path(user_query):
             print("Answer:", answer)
             return
 
-test_fast_path("Find station chennai centrl")
+run_fast_path("Find station chennai centrl")
