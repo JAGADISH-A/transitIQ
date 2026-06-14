@@ -114,3 +114,13 @@ desktop.ini
 
 # Pyright
 .pyright/
+debug_payloads*
+response_live.json
+recovered.txt
+
+backend/audit_*.py
+backend/benchmark.py
+backend/*output.txt
+backend/*report.txt
+backend/before.json
+backend/journey_res.json

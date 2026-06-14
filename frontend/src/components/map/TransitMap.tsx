@@ -20,27 +20,16 @@ interface TransitMapProps {
   focusedLocation?: [number, number] | null;
 }
 
-const BoundsUpdater = ({ bounds }: { bounds: L.LatLngBounds | null }) => {
+const BoundsUpdater = ({ bounds, selectedRouteId }: { bounds: L.LatLngBounds | null; selectedRouteId?: string | null }) => {
   const map = useMap();
   useEffect(() => {
     if (bounds && bounds.isValid()) {
-      // 1. Add ~12% geographical padding to keep the route visually prominent without hugging the edges
-      const targetBounds = bounds.pad(0.12);
-      
-      // 2. Check the geographic diagonal distance of the bounds (in meters)
-      const diagDistance = targetBounds.getSouthWest().distanceTo(targetBounds.getNorthEast());
-      
-      // 3. Maintain city-level zoom if the route is < 100km, else fall back to a region zoom
-      const appropriateMaxZoom = diagDistance < 100000 ? 14 : 11;
-      
-      // 4. Always fly to bounds to focus on the journey, ignoring previous geographic coverage
-      map.flyToBounds(targetBounds, { 
-        padding: [20, 20], 
-        maxZoom: appropriateMaxZoom, 
-        duration: 1.5 
+      console.log("[MAP_NAV_DEBUG] fitBounds called with padding [50, 50] for selectedRouteId:", selectedRouteId);
+      map.fitBounds(bounds, {
+        padding: [50, 50]
       });
     }
-  }, [map, bounds]);
+  }, [map, bounds, selectedRouteId]);
   return null;
 };
 
@@ -276,6 +265,31 @@ export default function TransitMap({
     ? [selectedTransferRoute.transfer_stop, selectedTransferRoute.transfer_stop_2].filter(Boolean) as string[]
     : [];
 
+  // Temporary logs for debugging Map route & viewport state
+  const debugJourneyCoords = routeSegments.journey || [];
+  const debugTransferCoords = transferSegments.flatMap(seg => seg?.journey || []);
+  const totalRouteCoordsCount = debugJourneyCoords.length + debugTransferCoords.length;
+
+  console.log("[MAP_DEBUG_STATE]", {
+    selectedRouteId: selectedRoute?.id || null,
+    routeCoordinateCount: totalRouteCoordsCount,
+    startCoordinate: sourcePosition || null,
+    destinationCoordinate: destinationPosition || null,
+    computedBounds: bounds ? [
+      [bounds.getSouthWest().lat, bounds.getSouthWest().lng],
+      [bounds.getNorthEast().lat, bounds.getNorthEast().lng]
+    ] : null,
+    markerCount: (sourcePosition ? 1 : 0) + (destinationPosition ? 1 : 0) + transferPositions.length + tripStops.length
+  });
+
+  // Verify coordinates are valid numbers and in [lat, lng] format
+  const allCoordinatesToVerify = [...debugJourneyCoords, ...debugTransferCoords];
+  allCoordinatesToVerify.forEach((pt, i) => {
+    if (!pt || pt.length < 2 || typeof pt[0] !== 'number' || typeof pt[1] !== 'number' || isNaN(pt[0]) || isNaN(pt[1])) {
+      console.warn(`[MAP_WARNING] Invalid coordinate at index ${i}:`, pt);
+    }
+  });
+
   return (
     <div className="w-full h-full relative z-0">
       <MapContainer
@@ -289,11 +303,11 @@ export default function TransitMap({
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
         
-        {routeSegments.full && viewMode === 'full' && (
+        {routeSegments.full && viewMode === 'full' && routeSegments.full.length >= 2 && (
           <Polyline positions={routeSegments.full} color="#9CA3AF" weight={3} opacity={0.4} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
         )}
         
-        {routeSegments.journey && (
+        {routeSegments.journey && routeSegments.journey.length >= 2 && (
           <Polyline positions={routeSegments.journey} color="#F97316" weight={4} opacity={0.9} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
         )}
 
@@ -306,10 +320,10 @@ export default function TransitMap({
 
           return (
             <Fragment key={`dynamic-leg-polyline-${idx}`}>
-              {seg.full && viewMode === 'full' && (
+              {seg.full && viewMode === 'full' && seg.full.length >= 2 && (
                 <Polyline positions={seg.full} color="#9CA3AF" weight={3} opacity={0.4} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
               )}
-              {seg.journey && (
+              {seg.journey && seg.journey.length >= 2 && (
                 <Polyline positions={seg.journey} color={color} weight={4} opacity={opacity} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
               )}
             </Fragment>
@@ -389,7 +403,7 @@ export default function TransitMap({
           );
         })}
 
-        {bounds && !focusedLocation && <BoundsUpdater bounds={bounds} />}
+        {bounds && !focusedLocation && <BoundsUpdater bounds={bounds} selectedRouteId={selectedRoute?.id} />}
         {focusedLocation && <LocationFocuser location={focusedLocation} />}
       </MapContainer>
 

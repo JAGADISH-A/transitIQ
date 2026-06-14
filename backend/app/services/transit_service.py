@@ -268,6 +268,93 @@ class TransitService:
             self.logger.exception(message)
             raise RuntimeError(message) from exc
 
+    def get_nearby_stops_all_feeds(
+        self,
+        lat: float,
+        lon: float,
+        radius_km: float = 2.0,
+    ) -> List[NearbyStopResult]:
+        """Search all loaded GTFS feeds for nearby stops.
+
+        Deduplicates results strictly using (feed_name, stop_id) and sorts by distance ascending.
+        Limits the final result list to the closest 50 stops.
+        If no stops are found, falls back to a 5.0 km radius if current radius_km is less than 5.0.
+        """
+        try:
+            self.logger.info("Finding nearby stops across all feeds: lat=%f, lon=%f, radius_km=%f", lat, lon, radius_km)
+            
+            # Log loaded feeds
+            available_feeds = self.available_feeds()
+            self.logger.info("Loaded feeds: %s", available_feeds)
+
+            if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+                raise ValueError("lat and lon must be numeric values.")
+
+            if not isinstance(radius_km, (int, float)) or radius_km < 0:
+                raise ValueError("radius_km must be a non-negative number.")
+
+            def perform_search(search_radius: float) -> List[NearbyStopResult]:
+                results_list: List[NearbyStopResult] = []
+                seen: set[tuple[str, str]] = set()
+
+                for feed_name, loader in self._feeds.items():
+                    stops_df = loader.stops
+                    stop_count = len(stops_df) if stops_df is not None else 0
+                    self.logger.info("Feed '%s': examining %d stops for nearby search with radius %f km", feed_name, stop_count, search_radius)
+                    
+                    if stops_df is None or stops_df.empty:
+                        continue
+
+                    for _, row in stops_df.iterrows():
+                        try:
+                            stop_lat = float(row.get("stop_lat", 0.0))
+                            stop_lon = float(row.get("stop_lon", 0.0))
+                        except (TypeError, ValueError):
+                            continue
+
+                        if not math.isfinite(stop_lat) or not math.isfinite(stop_lon):
+                            continue
+
+                        distance_km = haversine(lat, lon, stop_lat, stop_lon)
+                        if distance_km <= search_radius:
+                            stop_id = str(row.get("stop_id", ""))
+                            dedupe_key = (feed_name, stop_id)
+                            if dedupe_key not in seen:
+                                seen.add(dedupe_key)
+                                results_list.append(
+                                    NearbyStopResult(
+                                        stop_id=stop_id,
+                                        stop_name=str(row.get("stop_name", "")),
+                                        lat=stop_lat,
+                                        lon=stop_lon,
+                                        distance_km=distance_km,
+                                    )
+                                )
+                return results_list
+
+            results = perform_search(radius_km)
+            
+            # Fallback search if no stops found
+            if not results and radius_km < 5.0:
+                self.logger.info("No nearby stops found within %f km. Retrying search with fallback radius 5.0 km.", radius_km)
+                results = perform_search(5.0)
+
+            # Sort results by distance ascending
+            results.sort(key=lambda item: item.distance_km)
+
+            # Limit results to 50 stops
+            results = results[:50]
+
+            self.logger.info("Found %d nearby stops across all feeds after post-processing", len(results))
+            return results
+
+        except ValueError:
+            self.logger.exception("Validation error in get_nearby_stops_all_feeds")
+            raise
+        except Exception as exc:
+            self.logger.exception("Failed to find nearby stops across all feeds")
+            raise RuntimeError(f"Failed to find nearby stops across all feeds: {exc}") from exc
+
     def search_stops_all_feeds(self, query: str) -> List[StopResult]:
         """Search stops across every loaded GTFS feed.
 

@@ -288,6 +288,9 @@ function App() {
           setJourneyRoutes(data.routes);
           setTransferRoutes(data.transfer_routes || []);
           const normalized = normalizeRoutes(data.routes, data.transfer_routes || []);
+          if (normalized.length > 0) {
+            handleRouteSelect(normalized[0]);
+          }
           return { 
              directCount: data.routes.length, 
              transferCount: (data.transfer_routes || []).length, 
