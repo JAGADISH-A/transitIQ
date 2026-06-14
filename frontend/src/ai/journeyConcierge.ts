@@ -1,4 +1,4 @@
-import type { NormalizedRoute, TransferJourney } from '../types/transit';
+import type { NormalizedRoute } from '../types/transit';
 import type { WorkspaceIntelligence, TimelineMilestone } from './types';
 
 export function generateWorkspaceIntelligence(route: NormalizedRoute): WorkspaceIntelligence {
@@ -26,7 +26,7 @@ export function generateWorkspaceIntelligence(route: NormalizedRoute): Workspace
   if (!isTransfer) {
     timeline.push({
       step: `Board ${originalData.route_name || "train"} at ${originalData.source_stop}`,
-      time: route.departureTime,
+      time: route.departureTime || undefined,
       icon: "board"
     });
     timeline.push({
@@ -35,7 +35,7 @@ export function generateWorkspaceIntelligence(route: NormalizedRoute): Workspace
     });
     timeline.push({
       step: `Arrive at destination`,
-      time: route.arrivalTime,
+      time: route.arrivalTime || undefined,
       icon: "destination"
     });
   } else {

@@ -62,10 +62,15 @@ export const RouteCard: React.FC<RouteCardProps> = ({ route, onClick, isHero = f
   
   if (isTransfer) {
     const t = originalData as TransferJourney;
+    const extT = t as any;
     const mode1 = MODE_MAP[t.first_leg.feed] || 'Rail';
     const mode2 = MODE_MAP[t.second_leg.feed] || 'Rail';
     if (!modes.includes(mode1)) modes.push(mode1);
     if (!modes.includes(mode2)) modes.push(mode2);
+    if (extT.third_leg) {
+      const mode3 = MODE_MAP[extT.third_leg.feed] || 'Rail';
+      if (!modes.includes(mode3)) modes.push(mode3);
+    }
     trainLabel = 'Multiple Services';
   } else {
     const t = originalData as JourneyRoute;
@@ -79,8 +84,25 @@ export const RouteCard: React.FC<RouteCardProps> = ({ route, onClick, isHero = f
     else if (id) trainLabel = `Train No. ${id}`;
   }
 
+  if (route.transferCount === 2) {
+    console.log("[2_TRANSFER_RENDER]", {
+      source: route.sourceName,
+      destination: route.destName,
+      transferCount: route.transferCount,
+      hasThirdLeg: !!(route.originalData as any).third_leg
+    });
+  }
+
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       onClick={onClick}
       className={`relative w-full text-left rounded-[24px] p-5 transition-all duration-300 group flex flex-col gap-4 ${
         isHero 
@@ -105,10 +127,13 @@ export const RouteCard: React.FC<RouteCardProps> = ({ route, onClick, isHero = f
         )}
       </div>
 
-      {/* Row 2: Train/Service Name */}
-      <div className="w-full">
+      {/* Row 2: Train/Service Name & Destination */}
+      <div className="w-full flex items-center justify-between gap-4">
         <span className="text-base font-semibold text-zinc-300 truncate block">
           {trainLabel || modes.join(' + ')}
+        </span>
+        <span className="text-xs font-semibold text-zinc-400 shrink-0">
+          to {route.destName}
         </span>
       </div>
 
@@ -137,10 +162,13 @@ export const RouteCard: React.FC<RouteCardProps> = ({ route, onClick, isHero = f
         </div>
       </div>
 
-      <div className="w-full mt-1 flex items-center justify-between">
+      <div className="w-full mt-2 flex items-center justify-between">
         <span className="text-[11px] font-medium text-zinc-500 uppercase tracking-widest">
           Runs Daily
         </span>
+        <div className="flex items-center gap-1.5 bg-[#FF4500]/10 border border-[#FF4500]/20 px-2 py-0.5 rounded text-[10px] font-semibold text-[#FF4500]">
+          <span>🧠 TransitIQ Insight</span>
+        </div>
       </div>
 
       {/* Compact Action Cluster */}
@@ -163,6 +191,6 @@ export const RouteCard: React.FC<RouteCardProps> = ({ route, onClick, isHero = f
           )}
         </div>
       )}
-    </button>
+    </div>
   );
 };

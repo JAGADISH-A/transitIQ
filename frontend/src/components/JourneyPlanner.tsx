@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { MapPin, Navigation, ArrowDownUp, Clock, Search, Loader2 } from 'lucide-react';
 import WheelTimePicker from './WheelTimePicker';
 import type { StopResult, SearchResponse } from '../types/transit';
+import { useGeolocation } from '../utils/useGeolocation';
 
 interface JourneyPlannerProps {
   onSearch: (source: StopResult, destination: StopResult, departureTime?: string) => void;
@@ -48,15 +49,46 @@ export default function JourneyPlanner({
   const [timeMode, setTimeMode] = useState<'now' | 'custom'>(initialTime ? 'custom' : 'now');
   const [customTime, setCustomTime] = useState<string>(parsedTime);
 
+  const { requestLocation, loading: locationLoading, error: locationError, lat, lon } = useGeolocation();
+  const [nearestStopDetecting, setNearestStopDetecting] = useState(false);
+
+  const [isSourceLoading, setIsSourceLoading] = useState(false);
+  const [isDestLoading, setIsDestLoading] = useState(false);
+  const [isSearchSubmitting, setIsSearchSubmitting] = useState(false);
+  const [loadingText, setLoadingText] = useState('');
+
+  // Fetch nearest stop when location is detected
+  useEffect(() => {
+    if (lat !== null && lon !== null) {
+      setNearestStopDetecting(true);
+      fetch(`http://localhost:8000/stops/nearby?lat=${lat}&lon=${lon}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.results && data.results.length > 0) {
+            const nearest = data.results[0];
+            setSelectedSource(nearest);
+            setSourceQuery(nearest.stop_name);
+          }
+        })
+        .catch(err => console.error('Error fetching nearby stop:', err))
+        .finally(() => {
+          setNearestStopDetecting(false);
+          setIsSourceFocused(false);
+        });
+    }
+  }, [lat, lon]);
+
   // Fetch Source Suggestions
   useEffect(() => {
     if (debouncedSourceQuery.length >= 2 && (!selectedSource || selectedSource.stop_name !== debouncedSourceQuery)) {
+      setIsSourceLoading(true);
       fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(debouncedSourceQuery)}`)
         .then(res => res.json())
         .then((data: SearchResponse) => {
           setSourceSuggestions(data.results || []);
         })
-        .catch(err => console.error('Error fetching source stops:', err));
+        .catch(err => console.error('Error fetching source stops:', err))
+        .finally(() => setIsSourceLoading(false));
     } else {
       setSourceSuggestions([]);
     }
@@ -65,40 +97,79 @@ export default function JourneyPlanner({
   // Fetch Destination Suggestions
   useEffect(() => {
     if (debouncedDestQuery.length >= 2 && (!selectedDest || selectedDest.stop_name !== debouncedDestQuery)) {
+      setIsDestLoading(true);
       fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(debouncedDestQuery)}`)
         .then(res => res.json())
         .then((data: SearchResponse) => {
           setDestSuggestions(data.results || []);
         })
-        .catch(err => console.error('Error fetching destination stops:', err));
+        .catch(err => console.error('Error fetching destination stops:', err))
+        .finally(() => setIsDestLoading(false));
     } else {
       setDestSuggestions([]);
     }
   }, [debouncedDestQuery, selectedDest]);
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
+    console.log('[SEARCH_BUTTON_CLICKED]');
+    setIsSearchSubmitting(true);
+    setLoadingText('Searching Stops...');
+
     let finalSource = selectedSource;
     let finalDest = selectedDest;
 
-    // Fallback Matching if user didn't click an autocomplete option
-    if (!finalSource && sourceSuggestions.length > 0) {
-      finalSource = sourceSuggestions[0];
-      setSelectedSource(finalSource);
-      setSourceQuery(finalSource.stop_name);
-    }
-    
-    if (!finalDest && destSuggestions.length > 0) {
-      finalDest = destSuggestions[0];
-      setSelectedDest(finalDest);
-      setDestQuery(finalDest.stop_name);
-    }
+    try {
+      // Force source resolution before search
+      if (!finalSource && sourceQuery.trim() !== '') {
+        setLoadingText('Searching Stops...');
+        const res = await fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(sourceQuery)}`);
+        const data = await res.json();
+        if (data.results && data.results.length > 0) {
+          finalSource = data.results[0];
+          setSelectedSource(finalSource);
+          setSourceQuery(finalSource!.stop_name);
+          console.log('[SOURCE_RESOLVED]');
+        }
+      }
 
-    if (finalSource && finalDest) {
+      // Force destination resolution before search
+      if (!finalDest && destQuery.trim() !== '') {
+        setLoadingText('Resolving Destination...');
+        const res = await fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(destQuery)}`);
+        const data = await res.json();
+        if (data.results && data.results.length > 0) {
+          finalDest = data.results[0];
+          setSelectedDest(finalDest);
+          setDestQuery(finalDest!.stop_name);
+          console.log('[DESTINATION_RESOLVED]');
+        }
+      }
+
+      if (!finalSource || !finalDest) {
+        console.log('[SEARCH_ABORTED]', {
+          reason: 'source or destination could not be resolved',
+          source: sourceQuery,
+          destination: destQuery,
+          sourceSuggestionsLength: sourceSuggestions.length,
+          destSuggestionsLength: destSuggestions.length
+        });
+        return;
+      }
+
       let timeToSend: string | undefined = undefined;
       if (timeMode === 'custom' && customTime) {
         timeToSend = customTime.length === 5 ? customTime + ":00" : customTime;
       }
-      onSearch(finalSource, finalDest, timeToSend);
+      
+      setLoadingText('Finding Routes...');
+      console.log('[JOURNEY_REQUEST_START]');
+      await onSearch(finalSource, finalDest, timeToSend);
+      console.log('[JOURNEY_REQUEST_COMPLETE]');
+    } catch (err) {
+      console.error('Error during search resolution:', err);
+    } finally {
+      setIsSearchSubmitting(false);
+      setLoadingText('');
     }
   };
 
@@ -157,9 +228,27 @@ export default function JourneyPlanner({
               className="w-full bg-[#0F0F0F] border border-white/10 rounded-2xl px-4 py-3.5 text-sm text-white focus:outline-none focus:border-[#FF4500]/50 focus:ring-1 focus:ring-[#FF4500]/50 transition-all placeholder:text-white/30"
               disabled={isLoading}
             />
-            {isSourceFocused && sourceSuggestions.length > 0 && (
+            {isSourceFocused && (
               <div className="absolute top-[calc(100%+8px)] left-0 w-full bg-[#111111] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50">
-                {sourceSuggestions.map((stop) => (
+                {/* Use My Location Option */}
+                <button
+                  className="w-full text-left px-4 py-3 text-sm text-[#FF4500] hover:bg-white/5 font-medium transition-colors border-b border-white/5 flex items-center gap-2"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    requestLocation();
+                  }}
+                  disabled={locationLoading || nearestStopDetecting}
+                >
+                  📍 {locationLoading || nearestStopDetecting ? "Detecting location..." : "Use My Current Location"}
+                </button>
+                
+                {locationError && (
+                  <div className="px-4 py-2 text-xs text-red-400 bg-red-400/10">
+                    {locationError}
+                  </div>
+                )}
+
+                {sourceSuggestions.length > 0 && sourceSuggestions.map((stop) => (
                   <button
                     key={stop.stop_id}
                     className="w-full text-left px-4 py-3 text-sm text-white/80 hover:bg-white/5 hover:text-white transition-colors border-b border-white/5 last:border-0"
@@ -176,6 +265,14 @@ export default function JourneyPlanner({
             )}
           </div>
         </div>
+
+        {/* Nearby Context Chip */}
+        {selectedSource && lat && lon && selectedSource.lat && selectedSource.lon && (
+           <div className="ml-12 -mt-1 z-10 flex items-center gap-1.5 text-xs font-medium text-white/60 bg-white/5 w-fit px-2 py-1 rounded-md border border-white/5">
+             <MapPin size={12} className="text-[#FF4500]" />
+             <span>Near {selectedSource.stop_name}</span>
+           </div>
+        )}
 
         <button 
           className="absolute left-[20px] top-1/2 -translate-y-1/2 -translate-x-1/2 w-7 h-7 rounded-full bg-[#2A2A2A] border border-white/10 flex items-center justify-center z-40 hover:bg-[#333333] transition-colors cursor-pointer text-white/70 hover:text-white hidden sm:flex"
@@ -256,13 +353,13 @@ export default function JourneyPlanner({
 
       <button 
         onClick={handleSearch}
-        disabled={isLoading || (!selectedSource && sourceQuery.trim() === '') || (!selectedDest && destQuery.trim() === '')}
+        disabled={isLoading || isSearchSubmitting || isSourceLoading || isDestLoading || (!selectedSource && sourceQuery.trim() === '') || (!selectedDest && destQuery.trim() === '')}
         className="w-full mt-auto bg-[#FF4500] hover:bg-[#ff571a] disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-2xl py-3.5 flex items-center justify-center gap-2 transition-colors shadow-[0_0_20px_rgba(255,69,0,0.3)]"
       >
-        {isLoading ? (
+        {isLoading || isSearchSubmitting ? (
           <>
             <Loader2 size={18} className="animate-spin" />
-            <span>Searching...</span>
+            <span>{loadingText || 'Finding Routes...'}</span>
           </>
         ) : (
           <>

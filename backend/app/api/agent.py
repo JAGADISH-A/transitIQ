@@ -61,6 +61,7 @@ def ask_foundry(query: Dict[str, Any] = Body(..., description="Foundry request p
             )
 
         user_query = query.get("query") if isinstance(query, dict) else None
+        context = query.get("context") if isinstance(query, dict) else None
         
         import logging
         logger = logging.getLogger(__name__)
@@ -69,7 +70,7 @@ def ask_foundry(query: Dict[str, Any] = Body(..., description="Foundry request p
         if not isinstance(user_query, str) or not user_query.strip():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="query must be a non-empty string.")
 
-        result = foundry_transit_agent.answer(user_query)
+        result = foundry_transit_agent.answer(user_query, context=context)
         return {
             "answer": result.get("answer", "I could not generate a response."),
             "provider": result.get("provider", "foundry"),

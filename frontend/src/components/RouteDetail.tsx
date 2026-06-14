@@ -2,23 +2,37 @@ import React from 'react';
 import { TrainFront, Footprints, User, Target, Play, CheckCircle2, X, ArrowLeft, Brain, Map } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { NormalizedRoute, JourneyRoute, TransferJourney } from '../types/transit';
-import { analyzeJourney } from '../ai/journeyIntelligence';
+import { analyzeTransferRisk } from '../ai/journeyIntelligence';
+import { analyzeRouteTradeoffs } from '../ai/routeTradeoffAnalyzer';
 
 interface RouteDetailProps {
   route: NormalizedRoute;
+  allRoutes?: NormalizedRoute[];
   onBack: () => void;
-  onOpenRoadmap?: () => void;
+  onOpenRoadmap: () => void;
+  onOpenAI?: () => void;
 }
 
 export const RouteDetail: React.FC<RouteDetailProps> = ({ 
   route, 
+  allRoutes,
   onBack,
-  onOpenRoadmap
+  onOpenRoadmap,
+  onOpenAI
 }) => {
   if (!route) return null;
   const isTransfer = route.isTransfer;
 
   console.log("ROUTE DETAIL INPUT", route);
+
+  if (route.transferCount === 2) {
+    console.log("[2_TRANSFER_RENDER]", {
+      source: route.sourceName,
+      destination: route.destName,
+      transferCount: route.transferCount,
+      hasThirdLeg: !!(route.originalData as any).third_leg
+    });
+  }
 
   const duration = route.durationMinutes;
   
@@ -135,6 +149,108 @@ export const RouteDetail: React.FC<RouteDetailProps> = ({
     }
 
     const r = route.originalData as TransferJourney;
+    const extR = r as any;
+    const hasThirdLeg = !!extR.third_leg;
+
+    if (hasThirdLeg) {
+      return (
+        <div className="flex flex-col pt-2">
+          {/* First Leg Origin */}
+          <JourneyRow 
+            time={r.first_leg.departure_display?.display_time}
+            stationName={r.first_leg.source_stop}
+            MainIcon={TrainFront}
+            iconColor="text-green-500"
+            actionTitle={getTrainTitle(r.first_leg)}
+            ActionIcon={TrainFront}
+            actionSubtitle={r.first_leg.feed ? r.first_leg.feed.toUpperCase() : 'LOCAL'}
+            statusText={`On Board · ${r.first_leg.duration_minutes} min`}
+            StatusIcon={Play}
+            statusColor="text-green-500/80"
+            glowColor="shadow-[0_0_6px_rgba(34,197,94,0.08)]"
+            railColor="bg-green-500/20"
+          />
+          
+          {/* Transfer Stop 1 */}
+          <JourneyRow 
+            time={r.first_leg.arrival_display?.display_time}
+            stationName={r.transfer_stop}
+            MainIcon={Footprints}
+            iconColor="text-amber-500"
+            actionTitle="Transfer Here"
+            ActionIcon={Footprints}
+            statusText={`Waiting · ${r.transfer_wait} min`}
+            StatusIcon={User}
+            statusColor="text-amber-500/80"
+            glowColor="shadow-[0_0_6px_rgba(245,158,11,0.08)]"
+            railColor="bg-amber-500/20"
+          />
+
+          {/* Second Leg Origin */}
+          <JourneyRow 
+            time={r.second_leg.departure_display?.display_time}
+            stationName={r.transfer_stop}
+            MainIcon={TrainFront}
+            iconColor="text-cyan-500"
+            actionTitle={getTrainTitle(r.second_leg)}
+            ActionIcon={TrainFront}
+            actionSubtitle={r.second_leg.feed ? r.second_leg.feed.toUpperCase() : 'LOCAL'}
+            statusText={`On Board · ${r.second_leg.duration_minutes} min`}
+            StatusIcon={Play}
+            statusColor="text-cyan-500/80"
+            glowColor="shadow-[0_0_6px_rgba(6,182,212,0.08)]"
+            railColor="bg-cyan-500/20"
+          />
+
+          {/* Transfer Stop 2 */}
+          <JourneyRow 
+            time={r.second_leg.arrival_display?.display_time}
+            stationName={extR.transfer_stop_2}
+            MainIcon={Footprints}
+            iconColor="text-amber-500"
+            actionTitle="Transfer Here"
+            ActionIcon={Footprints}
+            statusText={`Waiting · ${extR.transfer_wait_2} min`}
+            StatusIcon={User}
+            statusColor="text-amber-500/80"
+            glowColor="shadow-[0_0_6px_rgba(245,158,11,0.08)]"
+            railColor="bg-amber-500/20"
+          />
+
+          {/* Third Leg Origin */}
+          <JourneyRow 
+            time={extR.third_leg.departure_display?.display_time}
+            stationName={extR.transfer_stop_2}
+            MainIcon={TrainFront}
+            iconColor="text-indigo-500"
+            actionTitle={getTrainTitle(extR.third_leg)}
+            ActionIcon={TrainFront}
+            actionSubtitle={extR.third_leg.feed ? extR.third_leg.feed.toUpperCase() : 'LOCAL'}
+            statusText={`On Board · ${extR.third_leg.duration_minutes} min`}
+            StatusIcon={Play}
+            statusColor="text-indigo-500/80"
+            glowColor="shadow-[0_0_6px_rgba(99,102,241,0.08)]"
+            railColor="bg-indigo-500/20"
+          />
+
+          {/* Final Destination */}
+          <JourneyRow 
+            time={extR.third_leg.arrival_display?.display_time}
+            stationName={extR.third_leg.destination_stop}
+            MainIcon={Target}
+            iconColor="text-red-500"
+            actionTitle="Destination Reached"
+            ActionIcon={CheckCircle2}
+            statusText="Arrived"
+            StatusIcon={CheckCircle2}
+            statusColor="text-red-500/80"
+            glowColor="shadow-[0_0_6px_rgba(239,68,68,0.08)]"
+            isLast={true}
+          />
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-col pt-2">
         {/* First Leg Origin */}
@@ -244,7 +360,7 @@ export const RouteDetail: React.FC<RouteDetailProps> = ({
         <div className="flex flex-wrap items-center gap-2 text-[14px] text-zinc-400 font-medium">
           <span>{formattedDuration}</span>
           <span className="text-zinc-700">•</span>
-          <span>{isTransfer ? '1 Transfer' : 'Direct'}</span>
+          <span>{isTransfer ? (route.transferCount === 2 ? '2 Transfers' : '1 Transfer') : 'Direct'}</span>
           {recommendation && (
             <>
               <span className="text-zinc-700">•</span>
@@ -265,36 +381,130 @@ export const RouteDetail: React.FC<RouteDetailProps> = ({
         </button>
       )}
 
-      {/* TransitIQ Journey Explanation */}
+      {/* TransitIQ Insight */}
       {(() => {
-        const insight = analyzeJourney(route);
-        const expl = insight.explanation;
+        const transferRisk = analyzeTransferRisk(route);
+
+        if (allRoutes && allRoutes.length > 1) {
+          const comparison = analyzeRouteTradeoffs(allRoutes, route);
+          return (
+            <div className="flex flex-col gap-4 mb-6">
+              {/* Advantages */}
+              {comparison.advantages.length > 0 && (
+                <div className="flex flex-col gap-2 p-4 bg-[#FF4500]/5 border border-[#FF4500]/20 rounded-xl">
+                  <div className="flex items-center gap-2 text-[14px] font-semibold text-[#FF4500] mb-1">
+                    <Brain size={16} />
+                    Why Choose This Route
+                  </div>
+                  <ul className="flex flex-col gap-2 text-[13px] text-zinc-300">
+                    {comparison.advantages.map((adv, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <CheckCircle2 size={14} className="text-[#FF4500] shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-semibold text-zinc-200">{adv.title}: </span>
+                          <span className="text-zinc-400">{adv.description}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {/* Tradeoffs */}
+              {comparison.tradeoffs.length > 0 && (
+                <div className="flex flex-col gap-2 p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl">
+                  <div className="flex items-center gap-2 text-[14px] font-semibold text-amber-500 mb-1">
+                    <Brain size={16} />
+                    Things to Consider
+                  </div>
+                  <ul className="flex flex-col gap-2 text-[13px] text-zinc-300">
+                    {comparison.tradeoffs.map((td, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <X size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-semibold text-zinc-200">{td.title}: </span>
+                          <span className="text-zinc-400">{td.description}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {/* Alternatives */}
+              {comparison.alternatives.length > 0 && (
+                <div className="flex flex-col gap-2 p-4 bg-zinc-900 border border-white/5 rounded-xl">
+                  <div className="flex items-center gap-2 text-[14px] font-semibold text-zinc-300 mb-2">
+                    <Target size={16} />
+                    Alternative Options
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    {comparison.alternatives.map((alt, i) => (
+                      <div key={i} className="flex flex-col gap-1 text-[13px] border-l-2 border-[#FF4500]/40 pl-3">
+                        <span className="font-semibold text-zinc-200">{alt.label}</span>
+                        <ul className="text-zinc-400 space-y-1">
+                          {alt.pros.map((pro, j) => <li key={`pro-${j}`}>• {pro}</li>)}
+                          {alt.cons.map((con, j) => <li key={`con-${j}`}>• {con}</li>)}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        }
+        
+        const reasons = [];
+        // Basic intelligence logic using existing data
+        if (route.durationMinutes < 60) reasons.push("Fast and efficient journey duration");
+        if (route.transferCount === 0) reasons.push("Direct service with no transfers needed");
+        else reasons.push(`${transferRisk.title}: ${transferRisk.message}`);
+        
+        if (route.transferWait) {
+           reasons.push(`${route.transferWait} minute connection buffer`);
+        }
+
         return (
-          <div className="flex flex-col gap-3 mb-6 p-4 bg-white/[0.02] border border-white/5 rounded-xl">
+          <div className="flex flex-col gap-3 mb-6 p-4 bg-[#FF4500]/5 border border-[#FF4500]/20 rounded-xl">
             <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2 text-[14px] font-semibold text-zinc-200">
-                <Brain size={16} className="text-purple-400" />
-                TransitIQ Journey Explanation
-              </div>
-              <div className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide
-                ${expl.confidence === 'high' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 
-                  expl.confidence === 'medium' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 
-                  'bg-red-500/10 text-red-400 border border-red-500/20'}`}
-              >
-                {expl.confidence} Confidence
+              <div className="flex items-center gap-2 text-[14px] font-semibold text-[#FF4500]">
+                <Brain size={16} />
+                TransitIQ Insight
               </div>
             </div>
-            <p className="text-[13px] text-zinc-400 leading-relaxed">
-              {expl.summary}
+            <p className="text-[13px] text-zinc-300 leading-relaxed font-medium">
+              TransitIQ highlights this route because:
             </p>
-            <ol className="flex flex-col gap-1.5 mt-2 list-decimal list-inside text-[13px] text-zinc-300">
-              {expl.steps.map((step, i) => (
-                <li key={i} className="pl-1 marker:text-zinc-500">{step}</li>
+            <ul className="flex flex-col gap-1.5 mt-1 text-[13px] text-zinc-300">
+              {reasons.map((reason, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <CheckCircle2 size={14} className="text-[#FF4500] shrink-0 mt-0.5" />
+                  <span>{reason}</span>
+                </li>
               ))}
-            </ol>
+            </ul>
           </div>
         );
       })()}
+
+      {/* AI Contextual Action */}
+      {onOpenAI && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#1a1a1a] border border-[#FF4500]/30 rounded-xl p-3 sm:px-4 mb-6 shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
+          <div className="flex items-center gap-2 text-[13px] font-medium text-zinc-200">
+            <div className="w-6 h-6 rounded-full bg-[#FF4500]/20 flex items-center justify-center shrink-0">
+              <Brain size={13} className="text-[#FF4500]" />
+            </div>
+            <span>Have questions about this route?</span>
+          </div>
+          <button
+            onClick={onOpenAI}
+            className="shrink-0 flex items-center justify-center gap-1.5 bg-[#FF4500] hover:bg-[#e63e00] text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors"
+          >
+            Ask TransitIQ
+          </button>
+        </div>
+      )}
 
       {/* Main Journey Flow */}
       <div className="mb-4 pl-2 mt-2">

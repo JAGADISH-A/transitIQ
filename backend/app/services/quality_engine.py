@@ -76,8 +76,10 @@ class JourneyQualityEngine:
                 duration = j.duration_minutes or 0
                 dep_minutes = cls._parse_time_string(j.departure_time) if j.departure_time else 0
             else:
-                transfers = 1
+                transfers = 2 if getattr(j, 'third_leg', None) else 1
                 wait = j.transfer_wait
+                if transfers == 2 and getattr(j, 'transfer_wait_2', None) is not None:
+                    wait = max(j.transfer_wait, j.transfer_wait_2)
                 duration = j.total_duration
                 dep_minutes = cls._parse_time_string(j.first_leg.departure_time) if j.first_leg.departure_time else 0
                 
@@ -152,7 +154,8 @@ class JourneyQualityEngine:
                 if j.arrival_display and j.arrival_display.day_offset > 0:
                     flags.append("OVERNIGHT_JOURNEY")
             else:
-                if j.second_leg.arrival_display and j.second_leg.arrival_display.day_offset > 0:
+                last_leg = j.third_leg if getattr(j, 'third_leg', None) else j.second_leg
+                if last_leg.arrival_display and last_leg.arrival_display.day_offset > 0:
                     flags.append("OVERNIGHT_JOURNEY")
                 
             # Cap score between 0 and 100

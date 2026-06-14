@@ -26,7 +26,6 @@ export function generateRouteComparison(
   const points: string[] = [];
   
   const durDiff = activeRoute.durationMinutes - recommendedRoute.durationMinutes;
-  const transferDiff = activeRoute.transferCount - recommendedRoute.transferCount;
 
   if (activeRoute.transferCount === 0 && recommendedRoute.transferCount > 0) {
     badges.push("No Transfers");

@@ -41,22 +41,40 @@ export function normalizeRoutes(routes: JourneyRoute[], transferRoutes: Transfer
 
   const transfers: NormalizedRoute[] = (transferRoutes || [])
     .filter(r => r && r.first_leg && r.second_leg)
-    .map(r => ({
-      id: crypto.randomUUID(),
-      isTransfer: true,
-      sourceName: r.first_leg.source_stop || "Unknown Source",
-      destName: r.second_leg.destination_stop || "Unknown Destination",
-      departureTime: r.first_leg.departure_time || null,
-      arrivalTime: r.second_leg.arrival_time || null,
-      departureDisplay: r.first_leg.departure_display || createDisplayFallback(r.first_leg.departure_time),
-      arrivalDisplay: r.second_leg.arrival_display || createDisplayFallback(r.second_leg.arrival_time),
-      durationMinutes: r.total_duration || 0,
-      transferCount: 1,
-      transferWait: r.transfer_wait,
-      transferStopName: r.transfer_stop,
-      qualityScore: 1000 + ((r.transfer_wait || 0) * 2) + (r.total_duration || 0),
-      originalData: r
-    }));
+    .map(r => {
+      const extRoute = r as TransferJourney & {
+        third_leg?: JourneyRoute;
+        transfer_stop_2?: string;
+        transfer_wait_2?: number;
+      };
+      const hasThirdLeg = !!extRoute.third_leg;
+      const finalLeg = hasThirdLeg ? extRoute.third_leg! : r.second_leg;
+      
+      const route: NormalizedRoute = {
+        id: crypto.randomUUID(),
+        isTransfer: true,
+        sourceName: r.first_leg.source_stop || "Unknown Source",
+        destName: finalLeg.destination_stop || "Unknown Destination",
+        departureTime: r.first_leg.departure_time || null,
+        arrivalTime: finalLeg.arrival_time || null,
+        departureDisplay: r.first_leg.departure_display || createDisplayFallback(r.first_leg.departure_time),
+        arrivalDisplay: finalLeg.arrival_display || createDisplayFallback(finalLeg.arrival_time),
+        durationMinutes: r.total_duration || 0,
+        transferCount: hasThirdLeg ? 2 : 1,
+        transferWait: r.transfer_wait,
+        transferStopName: r.transfer_stop,
+        qualityScore: 1000 + ((r.transfer_wait || 0) * 2) + (r.total_duration || 0),
+        originalData: r
+      };
+
+      console.log("[2_TRANSFER_NORMALIZED]", {
+        source: route.sourceName,
+        destination: route.destName,
+        transferCount: route.transferCount
+      });
+
+      return route;
+    });
 
   const allRoutes = [...direct, ...transfers];
   console.log("=== NORMALIZATION AUDIT ===");

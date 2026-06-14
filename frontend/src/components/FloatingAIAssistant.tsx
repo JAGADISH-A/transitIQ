@@ -1,11 +1,29 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Sparkles, X, Send, Loader2, Train, AlertTriangle, Clock, MapPin, ArrowRight, RefreshCw, BarChart2, GitBranch, Footprints, Zap } from 'lucide-react';
+import { Sparkles, X, Send, Loader2, Train, AlertTriangle, Clock, MapPin, RefreshCw, BarChart2, GitBranch, Footprints, Zap, Brain } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
-import type { JourneyNarrative, JourneyContext, JourneyRoute, NormalizedRoute, TransferJourney } from '../types/transit';
-import type { RouteRecommendation, JourneyInsight } from '../ai/types';
+import type { JourneyNarrative, NormalizedRoute, JourneyContext } from '../types/transit';
+import type { RouteRecommendation,  } from '../ai/types';
 import { recommendBestRoute } from '../ai/routeAdvisor';
 import { analyzeTransferRisk } from '../ai/transferRiskAnalyzer';
 import { generateWorkspaceIntelligence } from '../ai/journeyConcierge';
+
+/* ─── Markdown renderer for AI messages ─── */
+const MarkdownText = ({ children }: { children: string }) => (
+  <ReactMarkdown
+    components={{
+      p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+      strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+      em: ({ children }) => <em className="italic text-[#ccc]">{children}</em>,
+      ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+      ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+      li: ({ children }) => <li className="text-[#d0d0d0]">{children}</li>,
+      br: () => <br />,
+    }}
+  >
+    {children}
+  </ReactMarkdown>
+);
 
 type MessageType = 'text' | 'searching' | 'result' | 'error' | 'not-found';
 
@@ -25,25 +43,13 @@ type Message = {
   allRoutes?: NormalizedRoute[];
 };
 
-interface SearchResult {
-  directCount: number;
-  transferCount: number;
-  source: string;
-  destination: string;
-  error?: string;
-  narrative?: JourneyNarrative;
-  topDirectRoute?: JourneyRoute;
-  topTransferRoute?: any;
-  normalizedRoutes?: NormalizedRoute[];
-}
-
 interface FloatingAIAssistantProps {
+  isOpen: boolean;
+  onOpen: () => void;
+  onClose: () => void;
   onSearch: (source: string, destination: string, time?: string) => Promise<any>;
   activeRoute: NormalizedRoute | null;
   onRouteSelect?: (route: NormalizedRoute | null) => void;
-  tripStops?: any[];
-  transferStops?: {leg1: any[], leg2: any[]} | null;
-  onStationFocus?: (coords: [number, number] | null) => void;
 }
 
 const chipSuggestions = [
@@ -51,6 +57,13 @@ const chipSuggestions = [
   { icon: "🏢", label: "Guindy from Avadi" },
   { icon: "📍", label: "Chennai Beach" },
   { icon: "⚡", label: "Fastest route to Guindy" },
+];
+
+const contextQuickQuestions = [
+  { icon: "❓", label: "Why this route?" },
+  { icon: "⚠️", label: "Transfer risk" },
+  { icon: "📊", label: "Journey breakdown" },
+  { icon: "🔀", label: "Alternative routes" }
 ];
 
 const formatDuration = (mins: number) => {
@@ -162,7 +175,7 @@ const AssistantCard = React.memo(({
             <div className="bg-[#161616] border border-[#252525] rounded-lg px-4 py-3 border-l-2 border-l-[#FF4500]">
             <div className="flex flex-col gap-2">
               <h4 className="text-[15px] font-semibold text-white">{msg.narrative?.headline || 'Results Found'}</h4>
-              <p className="text-[14px] text-[#d0d0d0] leading-relaxed">{msg.narrative?.summary || msg.text}</p>
+              <div className="text-[14px] text-[#d0d0d0] leading-relaxed"><MarkdownText>{msg.narrative?.summary || msg.text}</MarkdownText></div>
               {msg.narrative?.recommendation && (
                 <p className="text-[14px] text-[#d0d0d0] leading-relaxed">{msg.narrative.recommendation}</p>
               )}
@@ -201,7 +214,7 @@ const AssistantCard = React.memo(({
             <AlertTriangle size={14} />
             <span>{msg.type === 'not-found' ? 'Route Search Issue' : 'Connection Error'}</span>
           </div>
-          <p className="text-[13px] text-[#999] leading-relaxed">{msg.text}</p>
+          <div className="text-[13px] text-[#999] leading-relaxed"><MarkdownText>{msg.text}</MarkdownText></div>
           {msg.suggestions && msg.suggestions.length > 0 && (
             <div className="mt-2.5 pt-2 border-t border-[#222]">
               <p className="text-[12px] text-[#666] mb-1.5">Try:</p>
@@ -223,7 +236,7 @@ const AssistantCard = React.memo(({
         <Sparkles size={12} className="text-white" />
       </div>
       <div className="bg-[#161616] border border-[#252525] rounded-lg px-4 py-3 border-l-2 border-l-[#FF4500]">
-        <p className="text-[14px] text-[#d0d0d0] leading-relaxed">{msg.text}</p>
+        <div className="text-[14px] text-[#d0d0d0] leading-relaxed"><MarkdownText>{msg.text}</MarkdownText></div>
       </div>
     </div>
   );
@@ -531,39 +544,71 @@ const ContextPanel = ({
 
 /* ─── Main component ─── */
 export default function FloatingAIAssistant({ 
+  isOpen,
+  onOpen,
+  onClose,
   onSearch, 
   activeRoute, 
-  onRouteSelect,
-  tripStops,
-  transferStops,
-  onStationFocus 
+  onRouteSelect
 }: FloatingAIAssistantProps) {
-  const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [sessionContext, setSessionContext] = useState<JourneyContext | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (activeRoute) {
-      setSessionContext(prev => ({
-        ...prev,
-        active_journey: {
-          source: activeRoute.source_stop || (activeRoute.first_leg && activeRoute.first_leg.source_stop) || '',
-          destination: activeRoute.destination_stop || (activeRoute.second_leg && activeRoute.second_leg.destination_stop) || '',
-          departure_time: activeRoute.departure_time || (activeRoute.first_leg && activeRoute.first_leg.departure_time) || '',
-          transfer_station: activeRoute.transfer_stop || undefined,
-          transfer_count: activeRoute.journey_type === 'TRANSFER' ? 1 : 0
-        }
-      }));
-    }
-  }, [activeRoute]);
+  const [hasInjectedContext, setHasInjectedContext] = useState(false);
+
+  const addMsg = useCallback((msg: Omit<Message, 'id'>) => {
+    setMessages(prev => [...prev, { ...msg, id: Date.now().toString() + Math.random().toString(36).slice(2, 6) }]);
+  }, []);
 
   useEffect(() => {
-    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape' && isOpen) setIsOpen(false); };
+    if (activeRoute) {
+      // Find the message that holds this route's recommendation/allRoutes if available
+      const searchMessage = [...messages].reverse().find(m => m.allRoutes?.some((r: NormalizedRoute) => r.id === activeRoute.id));
+      const alternatives = searchMessage?.allRoutes;
+      const rec = searchMessage?.recommendation;
+
+      setSessionContext((prev: any) => ({
+        ...prev,
+        active_journey: {
+          source: activeRoute.sourceName,
+          destination: activeRoute.destName,
+          departure_time: activeRoute.departureTime || '',
+          transfer_station: activeRoute.transferStopName || undefined,
+          transfer_count: activeRoute.isTransfer ? 1 : 0
+        },
+        route: activeRoute,
+        transferRisk: analyzeTransferRisk(activeRoute),
+        workspaceIntelligence: generateWorkspaceIntelligence(activeRoute),
+        tradeoffs: rec?.comparison?.tradeoffs || [],
+        recommendation: rec || { reason: "Currently selected journey" },
+        allRoutes: alternatives || []
+      }));
+    } else {
+      setSessionContext(null);
+      setHasInjectedContext(false);
+    }
+  }, [activeRoute, messages]);
+
+  useEffect(() => {
+    if (isOpen && activeRoute && !hasInjectedContext) {
+      setHasInjectedContext(true);
+      const duration = formatDuration(activeRoute.durationMinutes || 0);
+      const transfers = activeRoute.isTransfer ? 1 : 0;
+      addMsg({
+        role: 'assistant',
+        type: 'text',
+        text: `**Current Journey Loaded**\n\n${activeRoute.sourceName} → ${activeRoute.destName}\n\nDuration: ${duration}\nTransfers: ${transfers}\n\nYou can now ask questions about this journey.`
+      });
+    }
+  }, [isOpen, activeRoute, hasInjectedContext, addMsg]);
+
+  useEffect(() => {
+    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape' && isOpen) onClose(); };
     window.addEventListener('keydown', fn);
     return () => window.removeEventListener('keydown', fn);
-  }, [isOpen]);
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     document.body.style.overflow = isOpen ? 'hidden' : '';
@@ -574,9 +619,7 @@ export default function FloatingAIAssistant({
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  const addMsg = useCallback((msg: Omit<Message, 'id'>) => {
-    setMessages(prev => [...prev, { ...msg, id: Date.now().toString() + Math.random().toString(36).slice(2, 6) }]);
-  }, []);
+
 
   const handleSubmit = useCallback(async (text: string) => {
     if (!text.trim() || isLoading) return;
@@ -600,16 +643,21 @@ export default function FloatingAIAssistant({
          return;
       }
       
-      if (intent.intent_type === 'EXPLAIN_ROUTE') {
-         if (sessionContext?.active_journey) {
-            const aj = sessionContext.active_journey;
-            let text = "This is a direct service with no transfers.";
-            if (aj.transfer_count > 0) {
-               text = `This route has ${aj.transfer_count} transfer(s). You will change trains at ${aj.transfer_station}.`;
-            }
-            addMsg({ role: 'assistant', type: 'text', text });
-         } else {
-            addMsg({ role: 'assistant', type: 'text', text: "You haven't selected a specific route yet for me to explain." });
+      const isExplicitNewSearch = intent.intent_type === 'NEW_SEARCH' && (intent.source || intent.destination);
+
+      if (sessionContext?.route && !isExplicitNewSearch) {
+         // Treat as Route Context QA
+         try {
+           const foundryRes = await fetch('http://localhost:8000/agent/foundry', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ query: text, context: sessionContext })
+           });
+           if (!foundryRes.ok) throw new Error('Foundry failed');
+           const foundryData = await foundryRes.json();
+           addMsg({ role: 'assistant', type: 'text', text: foundryData.answer });
+         } catch (e) {
+           addMsg({ role: 'assistant', type: 'error', text: "Failed to get route-aware answer." });
          }
          return;
       }
@@ -622,7 +670,7 @@ export default function FloatingAIAssistant({
         const to = dst || 'your destination';
 
         const comp = sessionContext?.previous_comparison || undefined;
-        setSessionContext(prev => ({
+        setSessionContext((prev: any) => ({
            ...prev,
            source: src,
            destination: dst,
@@ -670,7 +718,7 @@ export default function FloatingAIAssistant({
               const bestRec = recommendBestRoute(r.normalizedRoutes);
               if (bestRec) {
                 recommendation = bestRec;
-                recommendedRoute = r.normalizedRoutes.find(n => n.id === bestRec.recommendedRouteId);
+                recommendedRoute = r.normalizedRoutes.find((n: NormalizedRoute) => n.id === bestRec.recommendedRouteId);
               }
             }
 
@@ -722,43 +770,66 @@ export default function FloatingAIAssistant({
   const handleRouteSelectWithClose = (route: NormalizedRoute | null) => {
     if (onRouteSelect) {
       onRouteSelect(route);
-      setIsOpen(false);
+      onClose();
     }
   };
 
-  return (
-    <>
+  if (!isOpen) {
+    return (
       <button
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-5 right-5 z-[100] flex items-center gap-2 bg-[#161616] hover:bg-[#1e1e1e] border border-[#2a2a2a] hover:border-[#FF4500]/40 rounded-full pl-2.5 pr-3.5 py-2 text-[13px] font-medium text-[#aaa] hover:text-white shadow-2xl transition-all"
+        onClick={onOpen}
+        className="fixed bottom-6 right-6 z-[100] flex items-center gap-2.5 bg-[#FF4500] hover:bg-[#ff5511] text-white px-5 py-3.5 rounded-full shadow-[0_8px_30px_rgba(255,69,0,0.4)] hover:shadow-[0_8px_35px_rgba(255,69,0,0.6)] hover:-translate-y-1 transition-all duration-300 group transitiq-launcher"
       >
-        <div className="w-5 h-5 rounded-full bg-[#FF4500] flex items-center justify-center">
-          <Sparkles size={11} className="text-white" fill="currentColor" />
-        </div>
-        TransitIQ
+        <Brain size={20} className="group-hover:animate-pulse" fill="currentColor" />
+        <span className="font-semibold text-[15px] tracking-wide">Ask TransitIQ</span>
       </button>
+    );
+  }
 
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-[6px]"
-          onClick={e => { if (e.target === e.currentTarget) setIsOpen(false); }}
-        >
-          <div
-            className="flex flex-col md:flex-row bg-[#0a0a0a] border border-[#1e1e1e] sm:rounded-xl overflow-hidden shadow-[0_8px_30px_rgba(0,0,0,0.5)] w-full h-[95vh] sm:h-[85vh] sm:w-[95vw] md:w-[85vw] max-w-[1400px]"
-          >
-            {/* Left Panel: Conversation */}
-            <div className="w-full md:w-[68%] flex flex-col relative bg-[#111] h-full">
-              <div className="flex items-center justify-between px-5 py-3 border-b border-[#1e1e1e] shrink-0 bg-[#0a0a0a]">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded bg-[#FF4500] flex items-center justify-center">
-                    <Sparkles size={13} className="text-white" fill="currentColor" />
-                  </div>
-                  <span className="text-[14px] font-bold text-white tracking-wide">TransitIQ Workspace</span>
-                </div>
-                <button onClick={() => setIsOpen(false)} className="p-1.5 rounded-lg hover:bg-[#1e1e1e] text-[#888] hover:text-white transition-colors">
-                  <X size={18} />
-                </button>
+  return (
+    <div
+      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-[6px]"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="flex flex-col md:flex-row bg-[#0a0a0a] border border-[#1e1e1e] sm:rounded-xl overflow-hidden shadow-[0_8px_30px_rgba(0,0,0,0.5)] w-full h-[95vh] sm:h-[85vh] sm:w-[95vw] md:w-[85vw] max-w-[1400px]"
+      >
+        {/* Left Panel: Conversation */}
+        <div className="w-full md:w-[68%] flex flex-col relative bg-[#111] h-full">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-[#1e1e1e] shrink-0 bg-[#0a0a0a]">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded bg-[#FF4500] flex items-center justify-center">
+                <Sparkles size={13} className="text-white" fill="currentColor" />
               </div>
+              <span className="text-[14px] font-bold text-white tracking-wide">TransitIQ Workspace</span>
+            </div>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#1e1e1e] text-[#888] hover:text-white transition-colors">
+              <X size={18} />
+            </button>
+          </div>
+
+              {/* Context Banner */}
+              {activeRoute && (
+                <div className="bg-[#1a1a1a] border-b border-[#252525] px-5 py-3 flex items-center justify-between shadow-sm z-10 shrink-0">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-bold text-[#FF4500] tracking-wider uppercase">Current Journey</span>
+                    <span className="text-[14px] font-semibold text-white">
+                      {activeRoute.sourceName} <span className="text-[#888] mx-1">→</span> {activeRoute.destName}
+                    </span>
+                    <span className="text-[12px] text-[#888]">
+                      {formatDuration(activeRoute.durationMinutes || 0)} • {activeRoute.isTransfer ? '1 Transfer' : 'Direct'}
+                    </span>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      if (onRouteSelect) onRouteSelect(null);
+                    }}
+                    className="px-3 py-1.5 rounded-lg border border-[#333] hover:border-[#FF4500]/50 hover:bg-[#FF4500]/10 text-[12px] font-medium text-[#ccc] hover:text-[#FF4500] transition-colors"
+                  >
+                    Clear Context
+                  </button>
+                </div>
+              )}
 
               {messages.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center p-8 max-w-2xl mx-auto w-full">
@@ -773,7 +844,7 @@ export default function FloatingAIAssistant({
                   </div>
 
                   <div className="w-full grid grid-cols-2 gap-3">
-                    {chipSuggestions.map((s, i) => (
+                    {(activeRoute ? contextQuickQuestions : chipSuggestions).map((s, i) => (
                       <button
                         key={i}
                         onClick={() => handleSubmit(s.label)}
@@ -826,7 +897,5 @@ export default function FloatingAIAssistant({
             </div>
           </div>
         </div>
-      )}
-    </>
   );
 }

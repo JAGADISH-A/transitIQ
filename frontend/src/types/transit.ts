@@ -77,6 +77,9 @@ export interface TransferJourney {
   transfer_stop: string;
   first_leg: JourneyRoute;
   second_leg: JourneyRoute;
+  third_leg?: JourneyRoute;
+  transfer_stop_2?: string;
+  transfer_wait_2?: number;
   total_duration: number;
   transfer_wait: number;
   quality?: JourneyQuality;

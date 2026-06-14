@@ -609,10 +609,219 @@ class FoundryTransitAgent:
         return args
 
     # ------------------------------------------------------------------
+    # Rich Route Context Builder
+    # ------------------------------------------------------------------
+
+    def build_structured_route_context(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Build a rich, structured route narrative context from raw dictionary.
+
+        Omit missing/empty fields entirely to avoid placeholders.
+        """
+        route = context.get('route', {})
+        if not route:
+            return {}
+
+        transfer_risk = context.get('transferRisk', {})
+        recommendation = context.get('recommendation', {})
+        intel = context.get('workspaceIntelligence', {})
+        all_routes = context.get('allRoutes', [])
+
+        structured = {}
+
+        # 1. Format duration helper
+        def get_duration_str(mins: Any) -> Optional[str]:
+            if not mins:
+                return None
+            try:
+                m = int(float(mins))
+                if m < 60:
+                    return f"{m}m"
+                h = m // 60
+                rem_m = m % 60
+                return f"{h}h {rem_m}m" if rem_m > 0 else f"{h}h"
+            except (ValueError, TypeError):
+                return str(mins)
+
+        # Helper to validate a value is not empty or a placeholder
+        def is_valid(val: Any) -> bool:
+            if val is None:
+                return False
+            val_str = str(val).strip().upper()
+            if not val_str or val_str in ("N/A", "UNKNOWN", "NONE", "UNDEFINED"):
+                return False
+            return True
+
+        # 2. journeySummary
+        source = route.get("sourceName")
+        dest = route.get("destName")
+        dep_time = route.get("departureTime")
+        arr_time = route.get("arrivalTime")
+        duration = get_duration_str(route.get("durationMinutes"))
+        transfers = route.get("transferCount", 0)
+
+        summary_parts = []
+        if is_valid(source) and is_valid(dest):
+            summary_parts.append(f"{source} to {dest}")
+        if is_valid(dep_time):
+            summary_parts.append(f"departing at {dep_time}")
+        if is_valid(arr_time):
+            summary_parts.append(f"arriving at {arr_time}")
+        if is_valid(duration):
+            summary_parts.append(f"({duration} total)")
+
+        if transfers == 0:
+            summary_parts.append("direct service")
+        elif transfers == 1:
+            transfer_station = route.get("transferStopName")
+            if is_valid(transfer_station):
+                summary_parts.append(f"1 transfer at {transfer_station}")
+            else:
+                summary_parts.append("1 transfer")
+        else:
+            summary_parts.append(f"{transfers} transfers")
+
+        if summary_parts:
+            structured["journeySummary"] = " ".join(summary_parts)
+
+        # 3. transferDetails (omit if direct)
+        if transfers > 0:
+            transfer_station = route.get("transferStopName")
+            wait_mins = route.get("transferWait")
+            details = []
+            if is_valid(transfer_station):
+                details.append(f"Connection at {transfer_station}.")
+            if wait_mins is not None:
+                try:
+                    w = int(float(wait_mins))
+                    details.append(f"Waiting time is {w} minutes.")
+                except (ValueError, TypeError):
+                    details.append(f"Waiting time is {wait_mins} minutes.")
+
+            # Advice / instructions
+            risk_message = transfer_risk.get("message")
+            if is_valid(risk_message):
+                details.append(risk_message)
+
+            if details:
+                structured["transferDetails"] = " ".join(details)
+
+        # 4. recommendationReasons
+        reasons = recommendation.get("reasons") or []
+        rec_reason_str = recommendation.get("reason")
+        if rec_reason_str and rec_reason_str not in reasons:
+            reasons = [rec_reason_str] + list(reasons)
+
+        valid_reasons = [r for r in reasons if is_valid(r)]
+        if valid_reasons:
+            structured["recommendationReasons"] = valid_reasons
+
+        # 5. tradeoffs
+        # Extract from comparison tradeoff objects
+        tradeoff_objs = recommendation.get("comparison", {}).get("tradeoffs", []) or []
+        tradeoff_list = []
+        for t in tradeoff_objs:
+            title = t.get("title")
+            desc = t.get("description")
+            if is_valid(title) and is_valid(desc):
+                tradeoff_list.append(f"{title}: {desc}")
+            elif is_valid(desc):
+                tradeoff_list.append(desc)
+
+        # Also check direct tradeoffs list if any
+        direct_tradeoffs = context.get("tradeoffs", []) or []
+        for t in direct_tradeoffs:
+            if isinstance(t, dict):
+                desc = t.get("description") or t.get("title")
+                if is_valid(desc):
+                    tradeoff_list.append(desc)
+            elif is_valid(t):
+                tradeoff_list.append(str(t))
+
+        if tradeoff_list:
+            structured["tradeoffs"] = tradeoff_list
+
+        # 6. travelTips
+        tips = intel.get("tips") or []
+        valid_tips = [t for t in tips if is_valid(t)]
+        if valid_tips:
+            structured["travelTips"] = valid_tips
+
+        # 7. riskAssessment
+        risk_lvl = transfer_risk.get("level")
+        risk_msg = transfer_risk.get("message")
+        risk_title = transfer_risk.get("title")
+
+        risk_parts = []
+        if is_valid(risk_lvl):
+            risk_parts.append(f"Level: {risk_lvl.upper()}")
+        if is_valid(risk_title):
+            risk_parts.append(risk_title)
+        if is_valid(risk_msg) and risk_msg not in risk_parts:
+            risk_parts.append(risk_msg)
+
+        if risk_parts:
+            structured["riskAssessment"] = " — ".join(risk_parts)
+
+        # 8. bestAlternative & alternativeReason (Alternatives should be ranked)
+        if all_routes:
+            active_id = route.get("id")
+            # Filter out active route
+            alts = [r for r in all_routes if r.get("id") != active_id]
+            if alts:
+                # Rank: If active is NOT the recommended route, the recommended route is the best alternative
+                rec_route_id = recommendation.get("recommendedRouteId")
+                best_alt = None
+                alt_reason = ""
+
+                if rec_route_id and active_id != rec_route_id:
+                    rec_alt = next((r for r in alts if r.get("id") == rec_route_id), None)
+                    if rec_alt:
+                        best_alt = rec_alt
+                        alt_reason = "This is TransitIQ's recommended route because it offers the optimal balance of speed and transfer safety."
+
+                # Otherwise, find the fastest alternative or the one with fewer transfers
+                if not best_alt:
+                    # Sort alternatives by duration
+                    sorted_alts = sorted(alts, key=lambda x: x.get("durationMinutes", 999999))
+                    if sorted_alts:
+                        best_alt = sorted_alts[0]
+                        active_dur = route.get("durationMinutes", 0)
+                        best_alt_dur = best_alt.get("durationMinutes", 0)
+
+                        if best_alt_dur < active_dur:
+                            diff = active_dur - best_alt_dur
+                            alt_reason = f"Faster journey by {diff} minutes, but requires {best_alt.get('transferCount', 0)} transfer(s)."
+                        elif best_alt.get("transferCount", 0) < route.get("transferCount", 0):
+                            alt_reason = "Requires fewer connections, making it a more direct but potentially slower choice."
+                        else:
+                            alt_reason = "An alternative route choice with a different time schedule."
+
+                if best_alt:
+                    alt_duration = get_duration_str(best_alt.get("durationMinutes"))
+                    structured["bestAlternative"] = {
+                        "source": best_alt.get("sourceName"),
+                        "destination": best_alt.get("destName"),
+                        "duration": alt_duration,
+                        "transfers": best_alt.get("transferCount", 0),
+                        "transferStation": best_alt.get("transferStopName") if best_alt.get("isTransfer") else None
+                    }
+                    # Clean bestAlternative dictionary of any invalid values
+                    structured["bestAlternative"] = {k: v for k, v in structured["bestAlternative"].items() if is_valid(v)}
+                    structured["alternativeReason"] = alt_reason
+
+        # 9. Real Delay Data (only if real delay data exists)
+        if "delayMinutes" in route and is_valid(route.get("delayMinutes")):
+            structured["delayMinutes"] = route.get("delayMinutes")
+        if "delayStatus" in route and is_valid(route.get("delayStatus")):
+            structured["delayStatus"] = route.get("delayStatus")
+
+        return structured
+
+    # ------------------------------------------------------------------
     # Main answer method
     # ------------------------------------------------------------------
 
-    def answer(self, user_query: str) -> Dict[str, Any]:
+    def answer(self, user_query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Answer the user query using Foundry tool-calling when available.
 
         If the Foundry project endpoint is not configured, the method falls back to
@@ -637,7 +846,7 @@ class FoundryTransitAgent:
             return {"answer": "I can help with transit questions. Please provide a destination or location query.", "provider": "local"}
 
         if self._openai_client is None:
-            print("OPENAI CLIENT IS NONE")
+            self.logger.warning("OPENAI CLIENT IS NONE — using local fallback")
             self.logger.warning("Foundry client unavailable; using local planner fallback for query '%s'", user_query)
             return {
                 "answer": ai_planner.answer_query(user_query).get("answer", "I could not find a matching destination."),
@@ -645,18 +854,58 @@ class FoundryTransitAgent:
             }
 
         system_prompt = (
-            "You are TransitIQ, a helpful transit assistant. "
-            "Use the available GTFS tools to answer questions about stops, feeds, and nearby locations. "
-            "Use find_trip when the user asks how to travel from one stop to another. "
-            "Prefer concise, natural-language answers based on the tool results.\n\n"
+            "You are TransitIQ, a professional railway transit assistant. "
+            "Use the available GTFS tools when you need data about stops, feeds, or routes. "
+            "Always use the loaded journey context when available.\n\n"
+            "RESPONSE RULES (MANDATORY):\n"
+            "1. **Answer the question first.** Lead with the direct answer. No preamble.\n"
+            "2. **5-sentence maximum** unless the user explicitly asks for details or a breakdown. "
+            "Most questions need 2-3 sentences.\n"
+            "3. **Never repeat information the user already sees.** The UI shows the route, "
+            "stations, departure/arrival times, duration, and transfer station in a context banner. "
+            "Do NOT restate these unless the user specifically asks about them.\n"
+            "4. **No filler.** Never say: 'Safe travels', 'Have a great journey', 'Happy traveling', "
+            "'Set an alarm', 'Wishing you...', or any motivational/sign-off text. "
+            "Do not add generic travel advice unless there is a real, specific risk.\n"
+            "5. **No templates.** Do not force emoji-labeled sections (🚆 Departure, 🏁 Arrival) "
+            "for every answer. Use structured formatting ONLY for timeline/timing breakdowns "
+            "when the user asks 'what are the timings?' or similar.\n"
+            "6. **Direct routes = short answers.** For direct (non-transfer) journeys, "
+            "give a brief confirmation, mention the departure time, suggest an arrival buffer "
+            "(5-10 min), and stop. Do not elaborate further.\n"
+            "7. **Transfers = be specific.** For transfer journeys, state the transfer station, "
+            "the connection window, and whether it is comfortable (>15 min), moderate (8-15 min), "
+            "or tight (<8 min). One sentence of practical advice if tight. No more.\n"
+            "8. **Grounding.** Always reference actual station names, times, and durations from context. "
+            "Never answer generically.\n"
+            "9. **Ambiguous follow-ups** (e.g., 'food?', 'luggage?', 'safety?') should be answered "
+            "specifically for the loaded journey. Keep it to 2-3 sentences with actionable info.\n\n"
             "CRITICAL TOOL-CALLING RULES:\n"
             "- When you need external data, you MUST emit a proper tool_call using the OpenAI function-calling format.\n"
             "- NEVER write tool names or JSON arguments inside your reasoning or response text.\n"
             "- NEVER describe a tool call in prose instead of actually invoking it.\n"
             "- If you need to call a tool, use the tool_calls mechanism. Do NOT output the call as text.\n"
             "- Each tool call must include the function name and a valid JSON arguments object.\n"
-            "- After receiving tool results, synthesize a helpful natural-language answer for the user."
+            "- After receiving tool results, synthesize a concise answer following the rules above."
         )
+
+        if context:
+            try:
+                # Format context clearly for the LLM using our Structured Context Builder
+                structured_ctx = self.build_structured_route_context(context)
+                
+                if structured_ctx:
+                    import json
+                    ctx_json = json.dumps(structured_ctx, indent=2)
+                    system_prompt += (
+                        f"\n\n--- Current Journey Context (JSON Structured Facts) ---\n"
+                        f"{ctx_json}\n\n"
+                        f"Answer the user's questions specifically referencing the loaded journey facts. "
+                        f"Apply the journey context to all ambiguous queries (e.g., questions about food, safety, luggage, or timing)."
+                    )
+                    self.logger.info("Injected journey context JSON into system prompt.")
+            except Exception as e:
+                self.logger.warning("Failed to format context: %s", e)
 
         messages: List[Dict[str, Any]] = [
             {"role": "system", "content": system_prompt},
@@ -667,15 +916,12 @@ class FoundryTransitAgent:
         successful_tool_results: List[tuple] = []
         final_answer = "I could not generate a response from the Foundry model."
 
-        print(f"\n{'='*60}")
-        print(f"[FOUNDRY-DIAG] START query={user_query!r}")
-        print(f"{'='*60}")
+        self.logger.debug("[FOUNDRY-DIAG] START query=%r", user_query)
 
         iteration = 0
         for _ in range(5):
             iteration += 1
-            print(f"\n[FOUNDRY-DIAG] --- Loop iteration {iteration} ---")
-            print(f"[FOUNDRY-DIAG] Messages count before call: {len(messages)}")
+            self.logger.debug("[FOUNDRY-DIAG] Loop iteration %d, messages=%d", iteration, len(messages))
 
             response = self._openai_client.chat.completions.create(
                 model=self.model_deployment,
@@ -685,33 +931,27 @@ class FoundryTransitAgent:
                 temperature=0.1,
             )
 
-            # --- Diagnostic: completion object ---
-            print(f"[FOUNDRY-DIAG] COMPLETION (iter {iteration}) = {response}")
-            print(f"[FOUNDRY-DIAG] choices count = {len(response.choices) if response.choices else 0}")
-
             if not response.choices:
-                print(f"[FOUNDRY-DIAG] *** WARNING: response.choices is empty/None! ***")
+                self.logger.warning("[FOUNDRY-DIAG] WARNING: response.choices is empty/None!")
 
             message = response.choices[0].message
             finish_reason = response.choices[0].finish_reason
-            print(f"[FOUNDRY-DIAG] MESSAGE (iter {iteration}) = {message}")
-            print(f"[FOUNDRY-DIAG] finish_reason  = {finish_reason}")
-            print(f"[FOUNDRY-DIAG] message.role    = {getattr(message, 'role', 'N/A')}")
-            print(f"[FOUNDRY-DIAG] message.content = {getattr(message, 'content', 'N/A')!r}")
-            print(f"[FOUNDRY-DIAG] message.content type = {type(getattr(message, 'content', None))}")
-            print(f"[FOUNDRY-DIAG] message.tool_calls = {getattr(message, 'tool_calls', 'N/A')}")
+            self.logger.debug(
+                "[FOUNDRY-DIAG] iter=%d finish_reason=%s role=%s tool_calls=%s",
+                iteration, finish_reason, getattr(message, 'role', 'N/A'),
+                getattr(message, 'tool_calls', None)
+            )
 
             # Check for reasoning_content (GPT-OSS extended field)
             reasoning_content = getattr(message, "reasoning_content", None) or ""
             if reasoning_content:
-                print(f"[FOUNDRY-DIAG] reasoning_content present ({len(reasoning_content)} chars)")
-                print(f"[FOUNDRY-DIAG] reasoning_content = {reasoning_content!r:.500}")
+                self.logger.debug("[FOUNDRY-DIAG] reasoning_content present (%d chars)", len(reasoning_content))
 
             assistant_message = message.model_dump(exclude_none=True) if hasattr(message, "model_dump") else {
                 "role": getattr(message, "role", "assistant"),
                 "content": getattr(message, "content", None),
             }
-            print(f"[FOUNDRY-DIAG] assistant_message appended = {assistant_message}")
+            self.logger.debug("[FOUNDRY-DIAG] assistant_message appended (role=%s)", assistant_message.get('role', 'N/A'))
             messages.append(assistant_message)
 
             self.logger.info(f"COMPLETION FINISH_REASON: {finish_reason}")
@@ -720,8 +960,7 @@ class FoundryTransitAgent:
             self.logger.info(f"COMPLETION REASONING: {reasoning_content}")
 
             tool_calls = getattr(message, "tool_calls", None) or []
-            print(f"[FOUNDRY-DIAG] TOOL CALLS (iter {iteration}) = {tool_calls}")
-            print(f"[FOUNDRY-DIAG] tool_calls count = {len(tool_calls)}")
+            self.logger.debug("[FOUNDRY-DIAG] tool_calls count=%d", len(tool_calls))
 
             if not tool_calls:
                 raw_content = getattr(message, "content", None)
@@ -730,9 +969,7 @@ class FoundryTransitAgent:
                 # RECOVERY: detect reasoning_content with embedded tool call
                 # ---------------------------------------------------------
                 if not raw_content and reasoning_content:
-                    print(f"[RECOVERY] Model failed to emit tool_call (iter {iteration})")
-                    print(f"[RECOVERY] finish_reason={finish_reason}, content={raw_content!r}")
-                    print(f"[RECOVERY] reasoning_content detected ({len(reasoning_content)} chars)")
+                    self.logger.debug("[RECOVERY] Model failed to emit tool_call (iter %d), reasoning_content detected (%d chars)", iteration, len(reasoning_content))
                     self.logger.warning(
                         "[RECOVERY] GPT-OSS reasoning_content fallback triggered for query '%s'",
                         user_query,
@@ -742,8 +979,7 @@ class FoundryTransitAgent:
 
                     if recovered is not None:
                         recovered_tool, recovered_args = recovered
-                        print(f"[RECOVERY] Tool inferred: {recovered_tool}")
-                        print(f"[RECOVERY] Arguments: {recovered_args}")
+                        self.logger.debug("[RECOVERY] Tool inferred: %s args=%s", recovered_tool, recovered_args)
 
                         REQUIRED_ARGS = {
                             "find_trip": ["source", "destination"],
@@ -786,9 +1022,9 @@ class FoundryTransitAgent:
                         }
 
                         tool_calls_used.append(recovered_tool)
-                        print(f"[RECOVERY] Executing recovered tool: {recovered_tool}")
+                        self.logger.debug("[RECOVERY] Executing recovered tool: %s", recovered_tool)
                         tool_result = self.execute_tool_call(synthetic_tool_call)
-                        print(f"[RECOVERY] Tool completed: {tool_result}")
+                        self.logger.debug("[RECOVERY] Tool completed")
                         messages.append(tool_result)
 
                         try:
@@ -798,21 +1034,19 @@ class FoundryTransitAgent:
                         except Exception:
                             pass
 
-                        print(f"[RECOVERY] Continuing conversation loop")
+                        self.logger.debug("[RECOVERY] Continuing conversation loop")
 
                         # Continue — next iteration sends tool result to model.
                         continue
                     else:
-                        print(f"[RECOVERY] All recovery tiers failed — no tool or args could be extracted")
+                        self.logger.debug("[RECOVERY] All recovery tiers failed — no tool or args could be extracted")
                         self.logger.warning(
                             "[RECOVERY] All tiers failed for reasoning_content: %s",
                             reasoning_content[:500],
                         )
 
                 # Normal exit: model returned text content (or nothing)
-                print(f"[FOUNDRY-DIAG] No tool calls — extracting final answer")
-                print(f"[FOUNDRY-DIAG] raw message.content = {raw_content!r}")
-                print(f"[FOUNDRY-DIAG] bool(raw_content)   = {bool(raw_content)}")
+                self.logger.debug("[FOUNDRY-DIAG] No tool calls — extracting final answer, raw_content bool=%s", bool(raw_content))
                 
                 # FIX: If raw_content is falsy, but reasoning_content has text (and we didn't recover a tool),
                 # use reasoning_content as the final answer instead of falling back to default error.
@@ -821,23 +1055,17 @@ class FoundryTransitAgent:
                 else:
                     final_answer = raw_content or final_answer
                 
-                print(f"[FOUNDRY-DIAG] final_answer after assignment = {final_answer!r}")
                 if final_answer == "I could not generate a response from the Foundry model.":
-                    print(f"[FOUNDRY-DIAG] *** BUG HIT: content was falsy, fell back to default error string ***")
-                    print(f"[FOUNDRY-DIAG] *** completion object  = {response} ***")
-                    print(f"[FOUNDRY-DIAG] *** choices count      = {len(response.choices) if response.choices else 0} ***")
-                    print(f"[FOUNDRY-DIAG] *** message.content    = {getattr(message, 'content', None)!r} ***")
-                    print(f"[FOUNDRY-DIAG] *** message.tool_calls = {getattr(message, 'tool_calls', None)} ***")
-                    print(f"[FOUNDRY-DIAG] *** reasoning_content  = {reasoning_content!r:.500} ***")
+                    self.logger.warning("[FOUNDRY-DIAG] BUG: content was falsy, fell back to default error string. choices=%d", len(response.choices) if response.choices else 0)
                 break
 
             for tool_call in tool_calls:
                 tool_name = getattr(getattr(tool_call, "function", None), "name", None)
-                print(f"[FOUNDRY-DIAG] Executing tool: {tool_name}")
+                self.logger.debug("[FOUNDRY-DIAG] Executing tool: %s", tool_name)
                 if tool_name:
                     tool_calls_used.append(tool_name)
                 tool_result = self.execute_tool_call(tool_call.model_dump() if hasattr(tool_call, "model_dump") else tool_call)
-                print(f"[FOUNDRY-DIAG] TOOL RESULT ({tool_name}) = {tool_result}")
+                self.logger.debug("[FOUNDRY-DIAG] TOOL RESULT (%s) received", tool_name)
                 messages.append(tool_result)
 
                 try:
@@ -847,11 +1075,11 @@ class FoundryTransitAgent:
                 except Exception:
                     pass
         else:
-            print(f"[FOUNDRY-DIAG] *** Exhausted max iterations (5) ***")
+            self.logger.warning("[FOUNDRY-DIAG] Exhausted max iterations (5)")
             self.logger.warning("Reached maximum tool-calling iterations for query '%s'", user_query)
 
         if final_answer == "I could not generate a response from the Foundry model." and successful_tool_results:
-            print("[FALLBACK] Building response from tool results")
+            self.logger.info("[FALLBACK] Building response from tool results")
             self.logger.info("[FALLBACK] Building response from tool results")
             
             fallback_parts = []
@@ -878,14 +1106,10 @@ class FoundryTransitAgent:
             
             if fallback_parts:
                 final_answer = "\n\n".join(fallback_parts)
-                print("[FALLBACK] Generated fallback answer")
+                self.logger.info("[FALLBACK] Generated fallback answer")
                 self.logger.info("[FALLBACK] Generated fallback answer")
 
-        print(f"\n[FOUNDRY-DIAG] === RETURNING ===")
-        print(f"[FOUNDRY-DIAG] final_answer   = {final_answer!r}")
-        print(f"[FOUNDRY-DIAG] tools_used     = {tool_calls_used}")
-        print(f"[FOUNDRY-DIAG] is_default_err = {final_answer == 'I could not generate a response from the Foundry model.'}")
-        print(f"{'='*60}\n")
+        self.logger.debug("[FOUNDRY-DIAG] RETURNING tools_used=%s is_default_err=%s", tool_calls_used, final_answer == 'I could not generate a response from the Foundry model.')
 
         self.logger.info(f"RETURN ITERATION: {iteration}")
         self.logger.info(f"RETURN FINAL_ANSWER: {final_answer}")

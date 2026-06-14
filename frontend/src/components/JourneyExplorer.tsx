@@ -44,7 +44,12 @@ export default function JourneyExplorer({
       let routePathIds = '';
       if (r.isTransfer) {
         const t = r.originalData as TransferJourney;
-        routePathIds = `${t.first_leg.route_id}_${t.second_leg.route_id}`;
+        const extT = t as any;
+        if (extT.third_leg) {
+          routePathIds = `${t.first_leg.route_id}_${t.second_leg.route_id}_${extT.third_leg.route_id}`;
+        } else {
+          routePathIds = `${t.first_leg.route_id}_${t.second_leg.route_id}`;
+        }
       } else {
         const t = r.originalData as JourneyRoute;
         routePathIds = `${t.route_id}`;
@@ -86,8 +91,12 @@ export default function JourneyExplorer({
         const modes: string[] = [];
         if (r.isTransfer) {
           const t = r.originalData as TransferJourney;
+          const extT = t as any;
           modes.push(MODE_MAP[t.first_leg.feed] || 'Rail');
           modes.push(MODE_MAP[t.second_leg.feed] || 'Rail');
+          if (extT.third_leg) {
+            modes.push(MODE_MAP[extT.third_leg.feed] || 'Rail');
+          }
         } else {
           const t = r.originalData as JourneyRoute;
           modes.push(MODE_MAP[t.feed] || 'Rail');
@@ -284,15 +293,25 @@ export default function JourneyExplorer({
               No routes match your current filters.
             </div>
           ) : (
-            displayRoutes.map((route) => (
-              <RoutePreview
-                key={route.id}
-                route={route}
-                onClick={() => handleRouteSelect(route)}
-                isCompared={compareRouteIds.has(route.id)}
-                onCompareToggle={(e) => handleCompareToggle(e, route.id)}
-              />
-            ))
+            displayRoutes.map((route) => {
+              if (route.transferCount === 2) {
+                console.log("[2_TRANSFER_RENDER]", {
+                  source: route.sourceName,
+                  destination: route.destName,
+                  transferCount: route.transferCount,
+                  hasThirdLeg: !!(route.originalData as any).third_leg
+                });
+              }
+              return (
+                <RoutePreview
+                  key={route.id}
+                  route={route}
+                  onClick={() => handleRouteSelect(route)}
+                  isCompared={compareRouteIds.has(route.id)}
+                  onCompareToggle={(e) => handleCompareToggle(e, route.id)}
+                />
+              );
+            })
           )}
         </div>
       </div>

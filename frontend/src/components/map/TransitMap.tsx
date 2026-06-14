@@ -1,20 +1,20 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, Fragment } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import type { TripStop } from '../../types/transit';
+import type { TripStop, NormalizedRoute, TransferJourney } from '../../types/transit';
 
 interface TransitMapProps {
   sourcePosition?: [number, number];
   destinationPosition?: [number, number];
-  transferPosition?: [number, number];
+  transferPositions?: [number, number][];
   sourceName?: string;
   destinationName?: string;
-  selectedRoute?: any;
-  selectedTransferRoute?: any;
+  selectedRoute?: NormalizedRoute | null;
+  selectedTransferRoute?: TransferJourney | null;
   routeShape?: [number, number][] | null;
-  transferShapes?: {leg1: [number, number][], leg2: [number, number][]} | null;
-  transferStops?: {leg1: TripStop[], leg2: TripStop[]} | null;
+  transferShapes?: [number, number][][] | null;
+  transferStops?: TripStop[][] | null;
   viewMode?: 'journey' | 'full';
   tripStops?: TripStop[];
   focusedLocation?: [number, number] | null;
@@ -75,11 +75,11 @@ const createCustomIcon = (color: string, radius: number = 14) => {
 export default function TransitMap({ 
   sourcePosition, 
   destinationPosition,
-  transferPosition,
+  transferPositions = [],
   sourceName = "Source",
   destinationName = "Destination",
   selectedRoute,
-  selectedTransferRoute,
+  selectedTransferRoute: propSelectedTransferRoute,
   routeShape,
   transferShapes,
   viewMode = 'journey',
@@ -90,13 +90,30 @@ export default function TransitMap({
   // If neither is provided, center somewhere default (e.g., Chennai)
   const defaultCenter: [number, number] = [13.0827, 80.2707];
   
-  console.log("MAP INPUT routeShape", routeShape);
-  console.log("MAP INPUT tripStops length", tripStops?.length);
+  console.log("[MAP_DEBUG]", {
+    routeShape,
+    transferShapes,
+    tripStops,
+    transferStops
+  });
+
+  const extRoute = selectedRoute?.originalData as TransferJourney | undefined;
+  const selectedTransferRoute = propSelectedTransferRoute || (selectedRoute?.isTransfer ? selectedRoute.originalData as TransferJourney : null);
+
+  if (extRoute) {
+    console.log("[LEG3_SHAPE_CHECK]", {
+      hasThirdLeg: !!extRoute.third_leg,
+      thirdLegShapeId: extRoute.third_leg?.shape_id,
+      thirdLegTripId: extRoute.third_leg?.trip_id
+    });
+  }
   
   const activePoints: [number, number][] = [];
   if (sourcePosition) activePoints.push(sourcePosition);
   if (destinationPosition) activePoints.push(destinationPosition);
-  if (transferPosition) activePoints.push(transferPosition);
+  if (transferPositions) {
+    transferPositions.forEach(pos => activePoints.push(pos));
+  }
 
   const fallbackRouteShape = useMemo(() => {
     if (routeShape && routeShape.length > 0) return routeShape;
@@ -132,42 +149,36 @@ export default function TransitMap({
     };
   }, [fallbackRouteShape, sourcePosition, destinationPosition]);
 
-  const transferSegments = useMemo(() => {
-    if (!transferShapes) return { leg1: null, leg2: null };
+  const legs = useMemo(() => {
+    if (!selectedRoute?.isTransfer || !extRoute) return [];
+    return [
+      extRoute.first_leg,
+      extRoute.second_leg,
+      extRoute.third_leg
+    ].filter(Boolean);
+  }, [selectedRoute, extRoute]);
 
-    const sliceShape = (shape: [number, number][], posA: [number, number], posB: [number, number]) => {
-      if (!shape || shape.length === 0) return { full: null, journey: null };
-      if (!posA || !posB) return { full: shape, journey: shape };
-      
-      let minA = Infinity, idxA = 0;
-      let minB = Infinity, idxB = 0;
-      
-      shape.forEach((pt, idx) => {
-        const dA = Math.pow(pt[0] - posA[0], 2) + Math.pow(pt[1] - posA[1], 2);
-        const dB = Math.pow(pt[0] - posB[0], 2) + Math.pow(pt[1] - posB[1], 2);
-        if (dA < minA) { minA = dA; idxA = idx; }
-        if (dB < minB) { minB = dB; idxB = idx; }
-      });
-      
-      const start = Math.min(idxA, idxB);
-      const end = Math.max(idxA, idxB);
-      
-      return {
-        full: shape,
-        journey: shape.slice(start, end + 1)
-      };
+  const transferSegments = useMemo(() => {
+    if (legs.length === 0) return [];
+
+    const getStopsCoordinates = (stops: TripStop[] | undefined | null) => {
+      if (!stops) return null;
+      const coords = stops
+        .filter(s => s.stop_lat !== undefined && s.stop_lon !== undefined && s.stop_lat !== null && s.stop_lon !== null)
+        .map(s => [s.stop_lat!, s.stop_lon!] as [number, number]);
+      return coords.length > 0 ? coords : null;
     };
 
-    const leg1 = transferShapes.leg1 && sourcePosition && transferPosition 
-      ? sliceShape(transferShapes.leg1, sourcePosition, transferPosition) 
-      : { full: transferShapes.leg1, journey: transferShapes.leg1 };
-      
-    const leg2 = transferShapes.leg2 && transferPosition && destinationPosition
-      ? sliceShape(transferShapes.leg2, transferPosition, destinationPosition)
-      : { full: transferShapes.leg2, journey: transferShapes.leg2 };
+    return legs.map((_, index) => {
+      const shape = transferShapes?.[index];
+      const stops = transferStops?.[index];
+      const legShape = (shape && shape.length > 0)
+        ? shape
+        : getStopsCoordinates(stops);
 
-    return { leg1, leg2 };
-  }, [transferShapes, sourcePosition, transferPosition, destinationPosition]);
+      return legShape ? { full: legShape, journey: legShape } : null;
+    });
+  }, [legs, transferShapes, transferStops]);
 
   const renderStops = (stops: TripStop[] | undefined, startName: string, endName: string, segmentColor: string = '#F97316') => {
     if (!stops || stops.length === 0) return null;
@@ -232,34 +243,38 @@ export default function TransitMap({
     let allPoints: [number, number][] = [];
     if (sourcePosition) allPoints.push(sourcePosition);
     if (destinationPosition) allPoints.push(destinationPosition);
-    if (transferPosition) allPoints.push(transferPosition);
+    if (transferPositions) {
+      allPoints = allPoints.concat(transferPositions);
+    }
 
     // Always include the journey's actual curved path in the bounding box
     if (routeSegments.journey && routeSegments.journey.length > 0) {
       allPoints = allPoints.concat(routeSegments.journey);
     }
-    if (transferSegments.leg1?.journey && transferSegments.leg1.journey.length > 0) {
-      allPoints = allPoints.concat(transferSegments.leg1.journey);
-    }
-    if (transferSegments.leg2?.journey && transferSegments.leg2.journey.length > 0) {
-      allPoints = allPoints.concat(transferSegments.leg2.journey);
-    }
+    transferSegments.forEach(seg => {
+      if (seg?.journey && seg.journey.length > 0) {
+        allPoints = allPoints.concat(seg.journey);
+      }
+    });
 
     // Include the full un-trimmed shapes only if viewMode requires it
     if (viewMode === 'full') {
       if (routeSegments.full && routeSegments.full.length > 0) {
         allPoints = allPoints.concat(routeSegments.full);
       }
-      if (transferSegments.leg1?.full && transferSegments.leg1.full.length > 0) {
-        allPoints = allPoints.concat(transferSegments.leg1.full);
-      }
-      if (transferSegments.leg2?.full && transferSegments.leg2.full.length > 0) {
-        allPoints = allPoints.concat(transferSegments.leg2.full);
-      }
+      transferSegments.forEach(seg => {
+        if (seg?.full && seg.full.length > 0) {
+          allPoints = allPoints.concat(seg.full);
+        }
+      });
     }
     
     return allPoints.length > 0 ? L.latLngBounds(allPoints) : null;
-  }, [sourcePosition, destinationPosition, transferPosition, viewMode, routeSegments, transferSegments]);
+  }, [sourcePosition, destinationPosition, transferPositions, viewMode, routeSegments, transferSegments]);
+
+  const transferStopNames = selectedTransferRoute
+    ? [selectedTransferRoute.transfer_stop, selectedTransferRoute.transfer_stop_2].filter(Boolean) as string[]
+    : [];
 
   return (
     <div className="w-full h-full relative z-0">
@@ -282,26 +297,48 @@ export default function TransitMap({
           <Polyline positions={routeSegments.journey} color="#F97316" weight={4} opacity={0.9} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
         )}
 
-        {transferSegments.leg1?.full && viewMode === 'full' && (
-          <Polyline positions={transferSegments.leg1.full} color="#9CA3AF" weight={3} opacity={0.4} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
-        )}
-        {transferSegments.leg1?.journey && (
-          <Polyline positions={transferSegments.leg1.journey} color="#F97316" weight={4} opacity={0.9} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
-        )}
+        {/* Render transfer route polylines */}
+        {transferSegments.map((seg, idx) => {
+          if (!seg) return null;
+          const colors = ['#F97316', '#fb923c', '#fdba74', '#fed7aa'];
+          const color = colors[idx % colors.length];
+          const opacity = 0.9 - (idx * 0.1);
 
-        {transferSegments.leg2?.full && viewMode === 'full' && (
-          <Polyline positions={transferSegments.leg2.full} color="#9CA3AF" weight={3} opacity={0.4} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
-        )}
-        {transferSegments.leg2?.journey && (
-          <Polyline positions={transferSegments.leg2.journey} color="#fb923c" weight={4} opacity={0.8} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
-        )}
+          return (
+            <Fragment key={`dynamic-leg-polyline-${idx}`}>
+              {seg.full && viewMode === 'full' && (
+                <Polyline positions={seg.full} color="#9CA3AF" weight={3} opacity={0.4} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
+              )}
+              {seg.journey && (
+                <Polyline positions={seg.journey} color={color} weight={4} opacity={opacity} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
+              )}
+            </Fragment>
+          );
+        })}
 
         {/* Intermediate Stop Markers */}
         {tripStops && tripStops.length > 0 && renderStops(tripStops, selectedRoute?.sourceName || sourceName || '', selectedRoute?.destName || destinationName || '')}
         
-        {transferStops?.leg1 && transferStops.leg1.length > 0 && renderStops(transferStops.leg1, selectedRoute?.sourceName || sourceName || '', selectedTransferRoute?.transfer_stop || '', '#F97316')}
-        
-        {transferStops?.leg2 && transferStops.leg2.length > 0 && renderStops(transferStops.leg2, selectedTransferRoute?.transfer_stop || '', selectedRoute?.destName || destinationName || '', '#fb923c')}
+        {legs.map((_, idx) => {
+          const stops = transferStops?.[idx];
+          if (!stops || stops.length === 0) return null;
+          const colors = ['#F97316', '#fb923c', '#fdba74', '#fed7aa'];
+          const color = colors[idx % colors.length];
+
+          const startStop = idx === 0 
+            ? (selectedRoute?.sourceName || sourceName || '')
+            : (transferStopNames[idx - 1] || '');
+
+          const endStop = idx === legs.length - 1
+            ? (selectedRoute?.destName || destinationName || '')
+            : (transferStopNames[idx] || '');
+
+          return (
+            <Fragment key={`dynamic-leg-stops-${idx}`}>
+              {renderStops(stops, startStop, endStop, color)}
+            </Fragment>
+          );
+        })}
 
         {sourcePosition && (
           <Marker position={sourcePosition} icon={createCustomIcon('#097752ff', 16)}>
@@ -333,20 +370,24 @@ export default function TransitMap({
           </Marker>
         )}
 
-        {transferPosition && selectedTransferRoute && (
-          <Marker position={transferPosition} icon={createCustomIcon('#F59E0B', 18)}>
-            <Popup className="transit-popup">
-              <div className="font-sans">
-                <div className="text-xs font-medium text-zinc-500 mb-1">
-                  Transfer Station
+        {/* Render dynamic transfer station markers */}
+        {transferPositions && transferPositions.map((pos, idx) => {
+          const stopName = transferStopNames[idx] || `Transfer Station ${idx + 1}`;
+          return (
+            <Marker key={`dynamic-transfer-${idx}`} position={pos} icon={createCustomIcon('#F59E0B', 18)}>
+              <Popup className="transit-popup">
+                <div className="font-sans">
+                  <div className="text-xs font-medium text-zinc-500 mb-1">
+                    Transfer Station {idx + 1}
+                  </div>
+                  <div className="font-semibold text-gray-900">
+                    {stopName}
+                  </div>
                 </div>
-                <div className="font-semibold text-gray-900">
-                  {selectedTransferRoute.transfer_stop}
-                </div>
-              </div>
-            </Popup>
-          </Marker>
-        )}
+              </Popup>
+            </Marker>
+          );
+        })}
 
         {bounds && !focusedLocation && <BoundsUpdater bounds={bounds} />}
         {focusedLocation && <LocationFocuser location={focusedLocation} />}
@@ -358,7 +399,7 @@ export default function TransitMap({
           <div className="w-3 h-3 rounded-full bg-[#10B981]" />
           <span>Start</span>
         </div>
-        {transferPosition && (
+        {transferPositions && transferPositions.length > 0 && (
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-[#F59E0B]" />
             <span>Transfer</span>
@@ -370,9 +411,9 @@ export default function TransitMap({
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-[#F97316]" />
-          <span>{transferPosition ? "Active Segment" : "Your Segment"}</span>
+          <span>{transferPositions && transferPositions.length > 0 ? "Active Segment" : "Your Segment"}</span>
         </div>
-        {transferPosition && (
+        {transferPositions && transferPositions.length > 0 && (
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-[#fb923c]" />
             <span>Future Segment</span>

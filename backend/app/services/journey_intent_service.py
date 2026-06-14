@@ -114,6 +114,7 @@ class JourneyIntentService:
                     "- MODIFY_FILTER: 'Show direct trains only'\n"
                     "- OPTIMIZE_ROUTE: 'Any faster options?'\n"
                     "- EXPLAIN_ROUTE: 'How long is the transfer?'\n"
+                    "- ROUTE_CONTEXT_QA: 'Why was this route recommended?', 'Is the transfer risky?', 'What are the tradeoffs?'\n"
                     "Return ONLY a valid JSON object matching this schema: "
                     "{ \"intent_type\": string, \"source\": string|null, \"destination\": string|null, "
                     "\"departure_time\": string|null, \"preference\": string|null }. "

@@ -54,7 +54,6 @@ export function recommendBestRoute(routes: NormalizedRoute[]): RouteRecommendati
   const best = scoredRoutes[0];
   const worst = scoredRoutes[scoredRoutes.length - 1];
 
-  const title = "TransitIQ Recommendation";
   let summary = "";
   const finalReasons = [...best.reasons];
   let confidence: "high" | "medium" | "low" = "medium";

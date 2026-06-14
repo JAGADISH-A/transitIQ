@@ -4,25 +4,17 @@ import Header from './components/Header';
 import JourneyPlanner from './components/JourneyPlanner';
 import TransitMap from './components/map/TransitMap';
 import RecommendedRoutes from './components/RecommendedRoutes';
-import type { JourneyRoute, TransferJourney, NormalizedRoute } from './types/transit';
+import type { NormalizedRoute, TransferJourney, JourneyRoute } from './types/transit';
+
 import FloatingAIAssistant from './components/FloatingAIAssistant';
 import JourneyExplorer from './components/JourneyExplorer';
 import FullJourneyRoadmap from './components/FullJourneyRoadmap';
 import { GlobalAlertModal } from './components/GlobalAlertModal';
 import { normalizeRoutes } from './utils/routeNormalizer';
 
-interface StopResult {
-  stop_id: string;
-  stop_name: string;
-  lat: number;
-  lon: number;
-}
 
-interface SearchResponse {
-  query: string;
-  results: StopResult[];
-  count: number;
-}
+
+
 
 export interface DisplayTime {
   display_time: string;
@@ -92,19 +84,20 @@ function App() {
   const [destinationPosition, setDestinationPosition] = useState<[number, number] | undefined>(undefined);
   const [sourceName, setSourceName] = useState<string | undefined>(undefined);
   const [destinationName, setDestinationName] = useState<string | undefined>(undefined);
-  const [transferPosition, setTransferPosition] = useState<[number, number] | undefined>(undefined);
+  const [transferPositions, setTransferPositions] = useState<[number, number][]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [journeyRoutes, setJourneyRoutes] = useState<JourneyRoute[]>([]);
   const [transferRoutes, setTransferRoutes] = useState<TransferJourney[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<NormalizedRoute | null>(null);
   const [routeShape, setRouteShape] = useState<[number, number][] | null>(null);
-  const [transferShapes, setTransferShapes] = useState<{leg1: [number, number][], leg2: [number, number][]} | null>(null);
+  const [transferShapes, setTransferShapes] = useState<[number, number][][] | null>(null);
   const [tripStops, setTripStops] = useState<TripStop[]>([]);
-  const [transferStops, setTransferStops] = useState<{leg1: TripStop[], leg2: TripStop[]} | null>(null);
+  const [transferStops, setTransferStops] = useState<TripStop[][] | null>(null);
   const [appView, setAppView] = useState<'planner' | 'explorer' | 'roadmap' | 'details'>('planner');
   const [searchTime, setSearchTime] = useState<string | undefined>(undefined);
   const [focusedLocation, setFocusedLocation] = useState<[number, number] | null>(null);
+  const [isAIOpen, setIsAIOpen] = useState(false);
 
   const normalizedRoutes = useMemo(() => normalizeRoutes(journeyRoutes, transferRoutes), [journeyRoutes, transferRoutes]);
 
@@ -141,59 +134,64 @@ function App() {
     setTransferShapes(null);
     setTripStops([]);
     setTransferStops(null);
-    setTransferPosition(undefined);
+    setTransferPositions([]);
 
     if (!route) return;
 
     if (route.isTransfer) {
       const tRoute = route.originalData as TransferJourney;
-      try {
-        const res = await fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(tRoute.transfer_stop)}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.results && data.results.length > 0) {
-            setTransferPosition([data.results[0].lat, data.results[0].lon]);
+      const legs = [
+        tRoute.first_leg,
+        tRoute.second_leg,
+        tRoute.third_leg
+      ].filter(Boolean) as JourneyRoute[];
+
+      const transferStopNames = [
+        tRoute.transfer_stop,
+        tRoute.transfer_stop_2
+      ].filter(Boolean) as string[];
+
+      const positions: [number, number][] = [];
+      for (const stopName of transferStopNames) {
+        try {
+          const res = await fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(stopName)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.results && data.results.length > 0) {
+              positions.push([data.results[0].lat, data.results[0].lon]);
+            }
           }
+        } catch (err) {
+          console.error('Error fetching transfer stop:', err);
         }
-      } catch (err) {
-        console.error('Error fetching transfer stop:', err);
       }
+      setTransferPositions(positions);
 
-      let leg1Shape = null;
-      let leg2Shape = null;
+      const shapes = await Promise.all(
+        legs.map(async (leg) => {
+          if (leg.shape_id) {
+            return await fetchRouteShape(leg.feed, leg.shape_id);
+          }
+          return null;
+        })
+      );
+      setTransferShapes(shapes.map(s => s || []));
 
-      if (tRoute.first_leg.shape_id) {
-        leg1Shape = await fetchRouteShape(tRoute.first_leg.feed, tRoute.first_leg.shape_id);
-      }
-      if (tRoute.second_leg.shape_id) {
-        leg2Shape = await fetchRouteShape(tRoute.second_leg.feed, tRoute.second_leg.shape_id);
-      }
-
-      if (leg1Shape || leg2Shape) {
-        setTransferShapes({
-          leg1: leg1Shape || [],
-          leg2: leg2Shape || []
-        });
-      }
-
-      let leg1Stops: TripStop[] = [];
-      let leg2Stops: TripStop[] = [];
-
-      try {
-        const res1 = await fetch(`http://localhost:8000/trips/${tRoute.first_leg.feed}/${tRoute.first_leg.trip_id}/stops`);
-        if (res1.ok) {
-          const d = await res1.json();
-          leg1Stops = d.stops || [];
-        }
-        const res2 = await fetch(`http://localhost:8000/trips/${tRoute.second_leg.feed}/${tRoute.second_leg.trip_id}/stops`);
-        if (res2.ok) {
-          const d = await res2.json();
-          leg2Stops = d.stops || [];
-        }
-      } catch (err) {
-        console.error('Error fetching transfer trip stops:', err);
-      }
-      setTransferStops({ leg1: leg1Stops, leg2: leg2Stops });
+      const stopsList = await Promise.all(
+        legs.map(async (leg) => {
+          try {
+            const res = await fetch(`http://localhost:8000/trips/${leg.feed}/${leg.trip_id}/stops`);
+            if (res.ok) {
+              const d = await res.json();
+              return d.stops || [];
+            }
+          } catch (err) {
+            console.error('Error fetching transfer trip stops:', err);
+          }
+          return [];
+        })
+      );
+      setTransferStops(stopsList);
     } else {
       const dRoute = route.originalData as JourneyRoute;
       fetchTripStops(dRoute.feed, dRoute.trip_id);
@@ -213,10 +211,11 @@ function App() {
     setTransferShapes(null);
     setTripStops([]);
     setTransferStops(null);
+    setTransferPositions([]);
     setError(null);
   };
 
-  const handleSearch = async (source: string, destination: string, departureTime?: string): Promise<{directCount: number; transferCount: number; source: string; destination: string; error?: string; narrative?: JourneyNarrative; topDirectRoute?: JourneyRoute; topTransferRoute?: TransferJourney; normalizedRoutes?: NormalizedRoute[]}> => {
+  const handleSearch = async (source: string | any, destination: string | any, departureTime?: string): Promise<{directCount: number; transferCount: number; source: string; destination: string; error?: string; narrative?: JourneyNarrative; topDirectRoute?: JourneyRoute; topTransferRoute?: TransferJourney; normalizedRoutes?: NormalizedRoute[]}> => {
     setIsLoading(true);
     setError(null);
     setJourneyRoutes([]);
@@ -226,28 +225,35 @@ function App() {
     setTransferShapes(null);
     setTripStops([]);
     setTransferStops(null);
+    setTransferPositions([]);
     
     try {
-      const [sourceRes, destRes] = await Promise.all([
-        fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(source)}`),
-        fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(destination)}`)
-      ]);
+      let s: any;
+      let d: any;
 
-      if (!sourceRes.ok) throw new Error('Failed to fetch source stops');
-      if (!destRes.ok) throw new Error('Failed to fetch destination stops');
-
-      const sourceData: SearchResponse = await sourceRes.json();
-      const destData: SearchResponse = await destRes.json();
-
-      if (!sourceData.results || sourceData.results.length === 0) {
-        throw new Error(`Source not found: ${source}`);
-      }
-      if (!destData.results || destData.results.length === 0) {
-        throw new Error(`Destination not found: ${destination}`);
+      if (typeof source === 'string') {
+        const sourceRes = await fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(source)}`);
+        if (!sourceRes.ok) throw new Error('Failed to fetch source stops');
+        const sourceData = await sourceRes.json();
+        if (!sourceData.results || sourceData.results.length === 0) {
+          throw new Error(`Source not found: ${source}`);
+        }
+        s = sourceData.results[0];
+      } else {
+        s = source;
       }
 
-      const s = sourceData.results[0];
-      const d = destData.results[0];
+      if (typeof destination === 'string') {
+        const destRes = await fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(destination)}`);
+        if (!destRes.ok) throw new Error('Failed to fetch destination stops');
+        const destData = await destRes.json();
+        if (!destData.results || destData.results.length === 0) {
+          throw new Error(`Destination not found: ${destination}`);
+        }
+        d = destData.results[0];
+      } else {
+        d = destination;
+      }
 
       setSourcePosition([s.lat, s.lon]);
       setSourceName(s.stop_name);
@@ -264,6 +270,14 @@ function App() {
       }
       setSearchTime(searchTimeString);
 
+      console.log('--- Journey Request Payload ---');
+      console.log(`Source: ${s.stop_name} (${s.stop_id})`);
+      console.log(`Destination: ${d.stop_name} (${d.stop_id})`);
+      console.log(`Time: ${searchTimeString}`);
+      console.log('[JOURNEY_PAYLOAD]', { source_stop_id: s.stop_id, destination_stop_id: d.stop_id, departure_after: searchTimeString, sourceObj: s, destinationObj: d });
+      console.log('-------------------------------');
+
+      console.log('[CALLING_JOURNEY_API]', `http://localhost:8000/journey?source_stop_id=${encodeURIComponent(s.stop_id)}&destination_stop_id=${encodeURIComponent(d.stop_id)}&departure_after=${encodeURIComponent(searchTimeString)}`);
       const journeyRes = await fetch(
         `http://localhost:8000/journey?source_stop_id=${encodeURIComponent(s.stop_id)}&destination_stop_id=${encodeURIComponent(d.stop_id)}&departure_after=${encodeURIComponent(searchTimeString)}`
       );
@@ -290,13 +304,17 @@ function App() {
         }
       }
       
-      return { directCount: 0, transferCount: 0, source, destination, error: 'Journey search failed' };
+      const sourceStr = typeof source === 'string' ? source : source.stop_name;
+      const destStr = typeof destination === 'string' ? destination : destination.stop_name;
+      return { directCount: 0, transferCount: 0, source: sourceStr, destination: destStr, error: 'Journey search failed' };
 
     } catch (err: any) {
       console.error(err);
       const errMsg = err.message || 'An unexpected error occurred during search.';
       setError(errMsg);
-      return { directCount: 0, transferCount: 0, source, destination, error: errMsg };
+      const sourceStr = typeof source === 'string' ? source : source.stop_name;
+      const destStr = typeof destination === 'string' ? destination : destination.stop_name;
+      return { directCount: 0, transferCount: 0, source: sourceStr, destination: destStr, error: errMsg };
     } finally {
       setIsLoading(false);
     }
@@ -359,28 +377,19 @@ function App() {
                   viewMode={appView === 'explorer' ? 'full' : 'journey'}
                   onViewModeChange={(mode: any) => setAppView(mode === 'full' ? 'explorer' : 'planner')}
                   onViewAll={() => setAppView('explorer')}
+                  onOpenAI={() => setIsAIOpen(true)}
                 />
               </div>
             ) : (
               <div className="flex flex-col gap-4">
                 <JourneyPlanner 
-                  onSearch={(src, dst, time) => handleSearch(src.stop_name, dst.stop_name, time)} 
+                  onSearch={(src, dst, time) => handleSearch(src, dst, time)} 
                   isLoading={isLoading} 
 
                   initialSource={sourceName || ''}
                   initialDestination={destinationName || ''}
                   initialTime={searchTime}
                 />
-                {appView === 'planner' && (
-                  <FloatingAIAssistant 
-                    onSearch={handleSearch} 
-                    activeRoute={selectedRoute} 
-                    onRouteSelect={(r) => { setAppView('details'); handleRouteSelect(r); }}
-                    tripStops={tripStops}
-                    transferStops={transferStops}
-                    onStationFocus={setFocusedLocation}
-                  />
-                )}
               </div>
             )}
           </div>
@@ -389,7 +398,7 @@ function App() {
             <TransitMap 
               sourcePosition={sourcePosition}
               destinationPosition={destinationPosition}
-              transferPosition={transferPosition}
+              transferPositions={transferPositions}
               routeShape={routeShape}
               transferShapes={transferShapes}
               sourceName={sourceName}
@@ -397,19 +406,20 @@ function App() {
               tripStops={tripStops}
               transferStops={transferStops}
               focusedLocation={focusedLocation}
+              selectedRoute={selectedRoute}
             />
           </div>
         </section>
       </main>
 
-      {/* 4. Floating AI Assistant (Bottom Right) */}
+      {/* Global AI Assistant Modal */}
       <FloatingAIAssistant 
+        isOpen={isAIOpen}
+        onOpen={() => setIsAIOpen(true)}
+        onClose={() => setIsAIOpen(false)}
         onSearch={handleSearch} 
         activeRoute={selectedRoute} 
         onRouteSelect={(r) => { setAppView('details'); handleRouteSelect(r); }}
-        tripStops={tripStops}
-        transferStops={transferStops}
-        onStationFocus={setFocusedLocation}
       />
 
       {/* Global Alert Modal */}

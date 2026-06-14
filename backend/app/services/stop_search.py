@@ -85,8 +85,24 @@ class StopSearch:
 
                     tier = None
                     
-                    # Tier 1: Exact stop_id match
-                    if id_lower == normalized_query or stop_id == query:
+                    # Filter out generic mock city objects (timestamp-based numeric IDs)
+                    if len(stop_id) >= 12 and stop_id.isdigit():
+                        continue
+
+                    # City aliases to boost major GTFS stations when users search by city name
+                    city_aliases = {
+                        "bangalore": ["SBC", "BNC", "YPR", "SMVB"],
+                        "bengaluru": ["SBC", "BNC", "YPR", "SMVB"],
+                        "chennai": ["MAS", "MS", "TBM", "PER"],
+                        "madras": ["MAS", "MS", "TBM", "PER"]
+                    }
+                    
+                    is_alias_match = False
+                    if normalized_query in city_aliases and stop_id in city_aliases[normalized_query]:
+                        is_alias_match = True
+
+                    # Tier 1: Exact stop_id match or alias match
+                    if id_lower == normalized_query or stop_id == query or is_alias_match:
                         tier = MatchTier.EXACT_ID
                     # Tier 2: Exact stop_name match
                     elif stop_name == query:
@@ -162,6 +178,10 @@ class StopSearch:
                     stop_name = str(getattr(row, "stop_name", "")).strip()
                     stop_id = str(getattr(row, "stop_id", "")).strip()
                     name_lower = stop_name.casefold()
+
+                    # Filter out generic mock city objects (timestamp-based numeric IDs)
+                    if len(stop_id) >= 12 and stop_id.isdigit():
+                        continue
                     
                     score = 0.0
                     if HAS_RAPIDFUZZ:

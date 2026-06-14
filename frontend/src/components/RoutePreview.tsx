@@ -73,11 +73,18 @@ export const RoutePreview: React.FC<RoutePreviewProps> = ({
   
   if (isTransfer) {
     const t = originalData as TransferJourney;
+    const extT = t as any;
     const mode1 = MODE_MAP[t.first_leg.feed] || 'Rail';
     const mode2 = MODE_MAP[t.second_leg.feed] || 'Rail';
     if (!modes.includes(mode1)) modes.push(mode1);
     if (!modes.includes(mode2)) modes.push(mode2);
-    trainLabel = 'Multiple';
+    if (extT.third_leg) {
+      const mode3 = MODE_MAP[extT.third_leg.feed] || 'Rail';
+      if (!modes.includes(mode3)) modes.push(mode3);
+      trainLabel = 'Multiple (3 Services)';
+    } else {
+      trainLabel = 'Multiple';
+    }
   } else {
     const t = originalData as JourneyRoute;
     const mode = MODE_MAP[t.feed] || 'Rail';
@@ -88,6 +95,15 @@ export const RoutePreview: React.FC<RoutePreviewProps> = ({
     else if (name && name === id) trainLabel = `Train No. ${id}`;
     else if (name) trainLabel = toTitleCase(name);
     else if (id) trainLabel = `Train No. ${id}`;
+  }
+
+  if (route.transferCount === 2) {
+    console.log("[2_TRANSFER_RENDER]", {
+      source: route.sourceName,
+      destination: route.destName,
+      transferCount: route.transferCount,
+      hasThirdLeg: !!(route.originalData as any).third_leg
+    });
   }
 
   return (

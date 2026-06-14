@@ -14,6 +14,7 @@ interface RecommendedRoutesProps {
   viewMode?: 'journey' | 'full';
   onViewModeChange?: (mode: 'journey' | 'full') => void;
   onViewAll?: () => void;
+  onOpenAI?: () => void;
 }
 
 export default function RecommendedRoutes({ 
@@ -22,7 +23,9 @@ export default function RecommendedRoutes({
   selectedRoute = null, 
   onRouteSelect,
   onOpenRoadmap,
-  onViewAll
+  
+  onViewAll,
+  onOpenAI
 }: RecommendedRoutesProps) {
 
   if (isLoading) {
@@ -152,8 +155,10 @@ export default function RecommendedRoutes({
             {selectedRoute ? (
               <RouteDetail 
                 route={selectedRoute}
+                allRoutes={uniqueNormalizedRoutes}
                 onBack={() => onRouteSelect?.(null)}
                 onOpenRoadmap={() => onOpenRoadmap?.(selectedRoute)}
+                onOpenAI={onOpenAI}
               />
             ) : null}
           </motion.div>

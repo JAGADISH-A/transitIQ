@@ -13,6 +13,7 @@ class IntentType(str, Enum):
     MODIFY_FILTER = "MODIFY_FILTER"
     OPTIMIZE_ROUTE = "OPTIMIZE_ROUTE"
     EXPLAIN_ROUTE = "EXPLAIN_ROUTE"
+    ROUTE_CONTEXT_QA = "ROUTE_CONTEXT_QA"
     CONTEXT_EXPIRED = "CONTEXT_EXPIRED"
 
 class ActiveJourney(BaseModel):
@@ -66,6 +67,12 @@ class MatchTier(IntEnum):
     PREFIX = 4
     TOKEN = 5
     FUZZY = 6
+
+
+class LegType(str, Enum):
+    """Type of a journey leg."""
+    TRAIN = "TRAIN"
+    WALK = "WALK"
 
 
 class JourneyType(str, Enum):
@@ -230,15 +237,33 @@ class JourneyRoute(BaseModel):
     quality: JourneyQuality | None = None
 
 
+class WalkLeg(BaseModel):
+    """A walking/interchange connection between two stops in the same complex."""
+    leg_type: LegType = LegType.WALK
+    from_stop_id: str
+    from_stop_name: str
+    to_stop_id: str
+    to_stop_name: str
+    walk_time_minutes: int
+    walk_distance_m: int
+    complex_id: str
+
+
 class TransferJourney(BaseModel):
-    """A single-transfer journey between two stops."""
+    """A single-transfer journey between two stops, optionally via a walk interchange."""
     journey_type: JourneyType = JourneyType.TRANSFER
     transfer_stop: str
     first_leg: JourneyRoute
     second_leg: JourneyRoute
     total_duration: int
     transfer_wait: int
+    walk_leg: WalkLeg | None = None
     quality: JourneyQuality | None = None
+    
+    # Optional extensions for 2-transfers
+    third_leg: JourneyRoute | None = None
+    transfer_stop_2: str | None = None
+    transfer_wait_2: int | None = None
 
 
 class JourneyResponse(BaseModel):

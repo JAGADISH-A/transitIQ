@@ -114,7 +114,7 @@ export function analyzeRouteTradeoffs(
 
   // C. Earlier Departure
   if (recommendedRoute.departureTime) {
-    const earlier = otherRoutes.find(r => r.departureTime && r.departureTime < recommendedRoute.departureTime);
+    const earlier = otherRoutes.find(r => r.departureTime && recommendedRoute.departureTime && r.departureTime < recommendedRoute.departureTime);
     if (earlier && !alternatives.find(a => a.routeId === earlier.id)) {
       const durDiff = earlier.durationMinutes - recommendedRoute.durationMinutes;
       const consList = [];
