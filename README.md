@@ -228,8 +228,3 @@ We welcome contributions from developers, designers, and transit enthusiasts!
 
 ---
 
-## 📝 License
-
-This project is licensed under the terms of the [MIT License](LICENSE). 
-
-See the [LICENSE](LICENSE) file for details.
