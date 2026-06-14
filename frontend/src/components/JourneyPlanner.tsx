@@ -3,6 +3,7 @@ import { MapPin, Navigation, ArrowDownUp, Clock, Search, Loader2 } from 'lucide-
 import WheelTimePicker from './WheelTimePicker';
 import type { StopResult, SearchResponse } from '../types/transit';
 import { useGeolocation } from '../utils/useGeolocation';
+import API_BASE from '@/lib/api';
 
 interface JourneyPlannerProps {
   onSearch: (source: StopResult, destination: StopResult, departureTime?: string) => void;
@@ -61,7 +62,7 @@ export default function JourneyPlanner({
   useEffect(() => {
     if (lat !== null && lon !== null) {
       setNearestStopDetecting(true);
-      fetch(`http://localhost:8000/stops/nearby?lat=${lat}&lon=${lon}`)
+      fetch(`${API_BASE}/stops/nearby?lat=${lat}&lon=${lon}`)
         .then(res => res.json())
         .then(data => {
           if (data.results && data.results.length > 0) {
@@ -82,7 +83,7 @@ export default function JourneyPlanner({
   useEffect(() => {
     if (debouncedSourceQuery.length >= 2 && (!selectedSource || selectedSource.stop_name !== debouncedSourceQuery)) {
       setIsSourceLoading(true);
-      fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(debouncedSourceQuery)}`)
+      fetch(`${API_BASE}/stops/search?q=${encodeURIComponent(debouncedSourceQuery)}`)
         .then(res => res.json())
         .then((data: SearchResponse) => {
           setSourceSuggestions(data.results || []);
@@ -98,7 +99,7 @@ export default function JourneyPlanner({
   useEffect(() => {
     if (debouncedDestQuery.length >= 2 && (!selectedDest || selectedDest.stop_name !== debouncedDestQuery)) {
       setIsDestLoading(true);
-      fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(debouncedDestQuery)}`)
+      fetch(`${API_BASE}/stops/search?q=${encodeURIComponent(debouncedDestQuery)}`)
         .then(res => res.json())
         .then((data: SearchResponse) => {
           setDestSuggestions(data.results || []);
@@ -122,7 +123,7 @@ export default function JourneyPlanner({
       // Force source resolution before search
       if (!finalSource && sourceQuery.trim() !== '') {
         setLoadingText('Searching Stops...');
-        const res = await fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(sourceQuery)}`);
+        const res = await fetch(`${API_BASE}/stops/search?q=${encodeURIComponent(sourceQuery)}`);
         const data = await res.json();
         if (data.results && data.results.length > 0) {
           finalSource = data.results[0];
@@ -135,7 +136,7 @@ export default function JourneyPlanner({
       // Force destination resolution before search
       if (!finalDest && destQuery.trim() !== '') {
         setLoadingText('Resolving Destination...');
-        const res = await fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(destQuery)}`);
+        const res = await fetch(`${API_BASE}/stops/search?q=${encodeURIComponent(destQuery)}`);
         const data = await res.json();
         if (data.results && data.results.length > 0) {
           finalDest = data.results[0];

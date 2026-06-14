@@ -18,7 +18,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
-from openai import OpenAI
+from openai import AzureOpenAI
 
 from app.config import get_settings
 from app.services.agent_tools import agent_tools
@@ -134,23 +134,33 @@ class FoundryTransitAgent:
         self.model_deployment = model_deployment or getattr(settings, "FOUNDRY_MODEL_DEPLOYMENT", "gpt-4o-mini")
         self._openai_client = None
 
-        print("OPENAI_ENDPOINT =", self.openai_endpoint)
-        print("DEPLOYMENT =", self.model_deployment)
-        print("API_KEY_PRESENT =", bool(settings.FOUNDRY_API_KEY))
+        self.logger.info("[FOUNDRY-INIT] Azure OpenAI endpoint: %s", self.openai_endpoint)
+        self.logger.info("[FOUNDRY-INIT] Model deployment: %s", self.model_deployment)
+        self.logger.info("[FOUNDRY-INIT] API key present: %s", bool(settings.FOUNDRY_API_KEY))
 
-        self.logger.info("Using Azure OpenAI endpoint: %s", self.openai_endpoint)
-        self.logger.info("Using deployment: %s", self.model_deployment)
+        self._api_key = settings.FOUNDRY_API_KEY
+        self._openai_client = None
+        self.logger.info("[FOUNDRY-INIT] Client will be initialized lazily on first use.")
 
-        if self.openai_endpoint:
-            try:
-                self._openai_client = OpenAI(
-                    base_url=self.openai_endpoint,
-                    api_key=settings.FOUNDRY_API_KEY,
-                )
-                self.logger.info("Foundry client initialized for endpoint %s", self.openai_endpoint)
-            except Exception as exc:  # pragma: no cover - runtime integration path
-                self.logger.warning("Foundry client initialization failed: %s", exc)
-                self._openai_client = None
+    def _get_client(self):
+        """Lazily initialize the AzureOpenAI client on first use."""
+        if self._openai_client is not None:
+            return self._openai_client
+        if not self.openai_endpoint or not self._api_key:
+            self.logger.warning("[FOUNDRY-CLIENT] No endpoint or API key — client unavailable.")
+            return None
+        try:
+            self._openai_client = AzureOpenAI(
+                api_key=self._api_key,
+                azure_endpoint=self.openai_endpoint,
+                api_version="2024-12-01-preview",
+            )
+            self.logger.info("[FOUNDRY-CLIENT] AzureOpenAI client initialized for %s", self.openai_endpoint)
+            return self._openai_client
+        except Exception as exc:
+            self.logger.error("[FOUNDRY-CLIENT] Failed to initialize AzureOpenAI: %s", exc)
+            self._openai_client = None
+            return None
 
     def _fast_path_route(self, user_query: str) -> Optional[Dict[str, Any]]:
         """Intent Router to bypass reasoning for simple transit lookups."""
@@ -845,9 +855,9 @@ class FoundryTransitAgent:
         if not isinstance(user_query, str) or not user_query.strip():
             return {"answer": "I can help with transit questions. Please provide a destination or location query.", "provider": "local"}
 
-        if self._openai_client is None:
-            self.logger.warning("OPENAI CLIENT IS NONE — using local fallback")
-            self.logger.warning("Foundry client unavailable; using local planner fallback for query '%s'", user_query)
+        client = self._get_client()
+        if client is None:
+            self.logger.warning("[FOUNDRY] Client unavailable — using local planner fallback for query '%s'", user_query)
             return {
                 "answer": ai_planner.answer_query(user_query).get("answer", "I could not find a matching destination."),
                 "provider": "local",
@@ -923,13 +933,24 @@ class FoundryTransitAgent:
             iteration += 1
             self.logger.debug("[FOUNDRY-DIAG] Loop iteration %d, messages=%d", iteration, len(messages))
 
-            response = self._openai_client.chat.completions.create(
-                model=self.model_deployment,
-                messages=messages,
-                tools=self.tool_definitions(),
-                tool_choice="auto",
-                temperature=0.1,
-            )
+            try:
+                response = client.chat.completions.create(
+                    model=self.model_deployment,
+                    messages=messages,
+                    tools=self.tool_definitions(),
+                    tool_choice="auto",
+                    temperature=0.1,
+                )
+            except Exception as api_exc:
+                self.logger.error("[FOUNDRY-DIAG] Azure OpenAI API call failed: %s", api_exc)
+                elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+                return {
+                    "answer": ai_planner.answer_query(user_query).get("answer", "I could not find a matching destination."),
+                    "provider": "local",
+                    "classification": "ERROR_FALLBACK",
+                    "execution_time_ms": elapsed_ms,
+                    "tools_used": [],
+                }
 
             if not response.choices:
                 self.logger.warning("[FOUNDRY-DIAG] WARNING: response.choices is empty/None!")

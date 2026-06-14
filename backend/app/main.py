@@ -37,9 +37,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="TransitIQ Backend", version=get_settings().APP_VERSION, lifespan=lifespan)
 
+ALLOWED_ORIGINS = [
+    "https://black-water-012dad100.7.azurestaticapps.net",
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

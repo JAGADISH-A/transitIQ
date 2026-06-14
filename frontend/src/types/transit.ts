@@ -38,6 +38,12 @@ export interface JourneyContext {
   last_updated?: string;
   active_journey?: ActiveJourney;
   previous_comparison?: PreviousRouteComparison;
+  route?: NormalizedRoute;
+  transferRisk?: any;
+  workspaceIntelligence?: any;
+  tradeoffs?: any[];
+  recommendation?: any;
+  allRoutes?: NormalizedRoute[];
 }
 
 export interface JourneyNarrative {

@@ -11,6 +11,7 @@ import JourneyExplorer from './components/JourneyExplorer';
 import FullJourneyRoadmap from './components/FullJourneyRoadmap';
 import { GlobalAlertModal } from './components/GlobalAlertModal';
 import { normalizeRoutes } from './utils/routeNormalizer';
+import API_BASE from '@/lib/api';
 
 
 
@@ -103,7 +104,7 @@ function App() {
 
   const fetchTripStops = async (feed: string, trip_id: string) => {
     try {
-      const stopsRes = await fetch(`http://localhost:8000/trips/${feed}/${trip_id}/stops`);
+      const stopsRes = await fetch(`${API_BASE}/trips/${feed}/${trip_id}/stops`);
       if (stopsRes.ok) {
         const data = await stopsRes.json();
         setTripStops(data.stops || []);
@@ -115,7 +116,7 @@ function App() {
 
   const fetchRouteShape = async (feed: string, shape_id: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/routes/shape?feed=${encodeURIComponent(feed)}&shape_id=${encodeURIComponent(shape_id)}`);
+      const res = await fetch(`${API_BASE}/routes/shape?feed=${encodeURIComponent(feed)}&shape_id=${encodeURIComponent(shape_id)}`);
       if (!res.ok) throw new Error('Failed to fetch route shape');
       const data = await res.json();
       if (data.points && data.points.length > 0) {
@@ -154,7 +155,7 @@ function App() {
       const positions: [number, number][] = [];
       for (const stopName of transferStopNames) {
         try {
-          const res = await fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(stopName)}`);
+          const res = await fetch(`${API_BASE}/stops/search?q=${encodeURIComponent(stopName)}`);
           if (res.ok) {
             const data = await res.json();
             if (data.results && data.results.length > 0) {
@@ -180,7 +181,7 @@ function App() {
       const stopsList = await Promise.all(
         legs.map(async (leg) => {
           try {
-            const res = await fetch(`http://localhost:8000/trips/${leg.feed}/${leg.trip_id}/stops`);
+            const res = await fetch(`${API_BASE}/trips/${leg.feed}/${leg.trip_id}/stops`);
             if (res.ok) {
               const d = await res.json();
               return d.stops || [];
@@ -232,7 +233,7 @@ function App() {
       let d: any;
 
       if (typeof source === 'string') {
-        const sourceRes = await fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(source)}`);
+        const sourceRes = await fetch(`${API_BASE}/stops/search?q=${encodeURIComponent(source)}`);
         if (!sourceRes.ok) throw new Error('Failed to fetch source stops');
         const sourceData = await sourceRes.json();
         if (!sourceData.results || sourceData.results.length === 0) {
@@ -244,7 +245,7 @@ function App() {
       }
 
       if (typeof destination === 'string') {
-        const destRes = await fetch(`http://localhost:8000/stops/search?q=${encodeURIComponent(destination)}`);
+        const destRes = await fetch(`${API_BASE}/stops/search?q=${encodeURIComponent(destination)}`);
         if (!destRes.ok) throw new Error('Failed to fetch destination stops');
         const destData = await destRes.json();
         if (!destData.results || destData.results.length === 0) {
@@ -277,9 +278,9 @@ function App() {
       console.log('[JOURNEY_PAYLOAD]', { source_stop_id: s.stop_id, destination_stop_id: d.stop_id, departure_after: searchTimeString, sourceObj: s, destinationObj: d });
       console.log('-------------------------------');
 
-      console.log('[CALLING_JOURNEY_API]', `http://localhost:8000/journey?source_stop_id=${encodeURIComponent(s.stop_id)}&destination_stop_id=${encodeURIComponent(d.stop_id)}&departure_after=${encodeURIComponent(searchTimeString)}`);
+      console.log('[CALLING_JOURNEY_API]', `${API_BASE}/journey?source_stop_id=${encodeURIComponent(s.stop_id)}&destination_stop_id=${encodeURIComponent(d.stop_id)}&departure_after=${encodeURIComponent(searchTimeString)}`);
       const journeyRes = await fetch(
-        `http://localhost:8000/journey?source_stop_id=${encodeURIComponent(s.stop_id)}&destination_stop_id=${encodeURIComponent(d.stop_id)}&departure_after=${encodeURIComponent(searchTimeString)}`
+        `${API_BASE}/journey?source_stop_id=${encodeURIComponent(s.stop_id)}&destination_stop_id=${encodeURIComponent(d.stop_id)}&departure_after=${encodeURIComponent(searchTimeString)}`
       );
 
       if (journeyRes.ok) {

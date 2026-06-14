@@ -7,3 +7,4 @@ python-dotenv==1.0.1
 azure-identity==1.25.3
 openai==1.51.2
 rapidfuzz
+gunicorn==22.0.0

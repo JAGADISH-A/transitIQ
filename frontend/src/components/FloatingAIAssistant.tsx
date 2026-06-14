@@ -7,6 +7,7 @@ import type { RouteRecommendation,  } from '../ai/types';
 import { recommendBestRoute } from '../ai/routeAdvisor';
 import { analyzeTransferRisk } from '../ai/transferRiskAnalyzer';
 import { generateWorkspaceIntelligence } from '../ai/journeyConcierge';
+import API_BASE from '@/lib/api';
 
 /* ─── Markdown renderer for AI messages ─── */
 const MarkdownText = ({ children }: { children: string }) => (
@@ -628,7 +629,7 @@ export default function FloatingAIAssistant({
     setIsLoading(true);
 
     try {
-      const res = await fetch('http://localhost:8000/ai/plan', {
+      const res = await fetch(`${API_BASE}/ai/plan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: text, context: sessionContext })
@@ -648,7 +649,7 @@ export default function FloatingAIAssistant({
       if (sessionContext?.route && !isExplicitNewSearch) {
          // Treat as Route Context QA
          try {
-           const foundryRes = await fetch('http://localhost:8000/agent/foundry', {
+           const foundryRes = await fetch(`${API_BASE}/agent/foundry`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ query: text, context: sessionContext })
