@@ -1395,6 +1395,7 @@ class TransitService:
 
                         for leg3_dep_row, wait2, d3_total in valid_leg3_deps:
                             leg3_trip_id = leg3_dep_row["trip_id"]
+                            dep3_time = str(leg3_dep_row["departure_time"])
                         
                             # Hard Cap on evaluated candidates
                             evaluated_candidates += 1
@@ -1465,7 +1466,7 @@ class TransitService:
                                 departure_time=dep2_time, arrival_time=arr2_time,
                                 departure_display=parse_gtfs_time_to_display(dep2_time),
                                 arrival_display=parse_gtfs_time_to_display(arr2_time),
-                                duration_minutes=a2_total - d2_total
+                                duration_minutes=arr2_total - d2_total
                             )
                             leg3 = JourneyRoute(
                                 journey_type=JourneyType.DIRECT, feed=feed_name,
