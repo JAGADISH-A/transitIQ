@@ -25,7 +25,7 @@ Traditional railway and transit mapping applications are rigid, database-lookup 
 
 ---
 
-## ✨ Key Features
+## ✨ Key Features    
 
 * 🤖 **AI Journey Assistant:** Real-time conversational recommendations, natural language trip summaries, and context-aware connection assistance powered by Azure OpenAI.
 * 🛤️ **Smart Multi-Transfer Routing:** Instantly discover the best way to travel between any two stations with custom-developed 1-transfer and 2-transfer routing algorithms.
