@@ -7,6 +7,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, status
 from app.services.ai_planner import ai_planner
 from app.services.foundry_agent import foundry_transit_agent
 from app.services.transit_service import transit_service
+from app.services.conversation_engine import engine as conversation_engine
 
 router = APIRouter()
 
@@ -48,10 +49,14 @@ def ask_query(query: str = Query(..., min_length=1, description="Natural-languag
 
 @router.post("/agent/foundry")
 def ask_foundry(query: Dict[str, Any] = Body(..., description="Foundry request payload")):
-    """Route a natural-language transit question through the Foundry tool-calling service.
+    """Route a natural-language transit question through the Conversation Intelligence Engine.
 
-    This endpoint preserves the existing FastAPI routing pattern while invoking
-    the Foundry-enabled service class for tool-calling and answer synthesis.
+    The engine classifies intent, assembles context, selects the appropriate
+    capability, executes backend logic if needed, and generates a response
+    via Groq or a built-in answer.
+
+    The API contract is unchanged — the frontend still receives the same
+    response shape.
     """
     try:
         if not transit_service.is_loaded:
@@ -69,7 +74,7 @@ def ask_foundry(query: Dict[str, Any] = Body(..., description="Foundry request p
         if not isinstance(user_query, str) or not user_query.strip():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="query must be a non-empty string.")
 
-        result = foundry_transit_agent.answer(user_query)
+        result = conversation_engine.process(user_query)
         return {
             "answer": result.get("answer", "I could not generate a response."),
             "provider": result.get("provider", "foundry"),

@@ -1,6 +1,9 @@
 """Pydantic response schemas for the TransitIQ API."""
 
-from enum import IntEnum
+from datetime import datetime
+from enum import Enum, IntEnum
+from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -129,4 +132,146 @@ class TripResponse(BaseModel):
     destination: str
     results: list[TripResult]
     feeds_searched: list[str]
+
+
+class IntentType(str, Enum):
+    NEW_SEARCH = "NEW_SEARCH"
+    MODIFY_TIME = "MODIFY_TIME"
+    MODIFY_FILTER = "MODIFY_FILTER"
+    OPTIMIZE_ROUTE = "OPTIMIZE_ROUTE"
+    EXPLAIN_ROUTE = "EXPLAIN_ROUTE"
+    ROUTE_CONTEXT_QA = "ROUTE_CONTEXT_QA"
+    CONTEXT_EXPIRED = "CONTEXT_EXPIRED"
+
+
+class JourneyContext(BaseModel):
+    source: Optional[str] = None
+    destination: Optional[str] = None
+    source_stop_id: Optional[str] = None
+    destination_stop_id: Optional[str] = None
+    departure_time: Optional[str] = None
+    preference: Optional[str] = None
+    last_updated: Optional[str] = None
+    route: Optional[dict] = None
+
+
+class JourneyIntentRequest(BaseModel):
+    prompt: str
+    context: Optional[JourneyContext] = None
+
+
+class JourneyIntentResponse(BaseModel):
+    intent_type: IntentType
+    source: Optional[str] = None
+    destination: Optional[str] = None
+    departure_time: Optional[str] = None
+    preference: Optional[str] = None
+    error_message: Optional[str] = None
+
+
+class DisplayTime(BaseModel):
+    display_time: str
+    day_offset: int
+
+
+class QualityClassification(str, Enum):
+    EXCELLENT = "Excellent"
+    GOOD = "Good"
+    ACCEPTABLE = "Acceptable"
+    POOR = "Poor"
+    LOW_QUALITY = "Low Quality"
+    REJECTED = "Rejected"
+
+
+class JourneyQuality(BaseModel):
+    score: float
+    classification: QualityClassification
+    recommendation_reason: str | None = None
+    route_flags: list[str] = []
+
+
+class JourneyNarrative(BaseModel):
+    headline: str
+    summary: str
+    recommendation: str
+    warnings: list[str]
+    alternatives_available: int
+
+
+class LegType(str, Enum):
+    TRAIN = "TRAIN"
+    WALK = "WALK"
+
+
+class JourneyType(str, Enum):
+    DIRECT = "DIRECT"
+    TRANSFER = "TRANSFER"
+
+
+class JourneyRoute(BaseModel):
+    journey_type: JourneyType = JourneyType.DIRECT
+    feed: str
+    trip_id: str
+    route_id: str
+    route_name: str
+    source_stop: str
+    destination_stop: str
+    stops_between: int
+    departure_time: str | None = None
+    arrival_time: str | None = None
+    departure_display: DisplayTime | None = None
+    arrival_display: DisplayTime | None = None
+    duration_minutes: int | None = None
+    shape_id: str | None = None
+    quality: JourneyQuality | None = None
+
+
+class WalkLeg(BaseModel):
+    leg_type: LegType = LegType.WALK
+    from_stop_id: str
+    from_stop_name: str
+    to_stop_id: str
+    to_stop_name: str
+    walk_time_minutes: int
+    walk_distance_m: int
+    complex_id: str
+
+
+class TransferJourney(BaseModel):
+    journey_type: JourneyType = JourneyType.TRANSFER
+    transfer_stop: str
+    first_leg: JourneyRoute
+    second_leg: JourneyRoute
+    total_duration: int
+    transfer_wait: int
+    walk_leg: WalkLeg | None = None
+    quality: JourneyQuality | None = None
+    third_leg: JourneyRoute | None = None
+    transfer_stop_2: str | None = None
+    transfer_wait_2: int | None = None
+
+
+class JourneyResponse(BaseModel):
+    success: bool
+    narrative: JourneyNarrative | None = None
+    routes: list[JourneyRoute]
+    transfer_routes: list[TransferJourney] = []
+
+
+class TripStop(BaseModel):
+    stop_id: str
+    stop_name: str
+    stop_sequence: int
+    arrival_time: str | None = None
+    departure_time: str | None = None
+    arrival_display: DisplayTime | None = None
+    departure_display: DisplayTime | None = None
+    stop_lat: float | None = None
+    stop_lon: float | None = None
+
+
+class TripStopsResponse(BaseModel):
+    feed: str
+    trip_id: str
+    stops: list[TripStop]
 

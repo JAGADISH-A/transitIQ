@@ -1,9 +1,10 @@
-"""Simple AI-agent tool wrappers for the transit service."""
+"""Simple AI-agent tool wrappers for the transit service and multi-modal providers."""
 
 import logging
 from typing import List
 
 from app.models.schemas import NearbyStopResult, StopResult
+from app.models.transit import TransportStop, TransportPreference
 from app.services.transit_service import transit_service
 
 
@@ -159,6 +160,52 @@ class TransitAgentTools:
             message = f"Failed to find trip from '{source}' to '{destination}': {exc}"
             self.logger.exception(message)
             raise RuntimeError(message) from exc
+
+
+    # ------------------------------------------------------------------
+    # Phase 5 — Multi-modal transport tools
+    # ------------------------------------------------------------------
+
+    def get_available_providers(self) -> list[dict]:
+        """Return information about all available transport providers."""
+        try:
+            from app.providers.registry import provider_registry
+            providers = provider_registry.list_providers()
+            return [p.model_dump() for p in providers]
+        except Exception as exc:
+            self.logger.warning("Failed to list providers: %s", exc)
+            return []
+
+    def search_stops_all_modes(self, query: str) -> list[dict]:
+        """Search stops across all transport providers (rail, bus, metro, ferry)."""
+        try:
+            from app.providers.registry import provider_registry
+            results = provider_registry.search_stops_all(query)
+            return [s.model_dump() for s in results[:20]]
+        except Exception as exc:
+            self.logger.warning("Multi-modal stop search failed: %s", exc)
+            return []
+
+    def find_multi_modal_journey(
+        self,
+        source: str,
+        destination: str,
+        preferences: dict | None = None,
+    ) -> dict:
+        """Find multi-modal journeys combining rail, bus, metro, and ferry."""
+        try:
+            from app.providers.multi_modal_planner import multi_modal_planner
+            pref = TransportPreference(**(preferences or {}))
+            journeys = multi_modal_planner.plan(source, destination, pref)
+            return {
+                "source": source,
+                "destination": destination,
+                "journeys": [j.model_dump() for j in journeys],
+                "count": len(journeys),
+            }
+        except Exception as exc:
+            self.logger.warning("Multi-modal journey planning failed: %s", exc)
+            return {"source": source, "destination": destination, "journeys": [], "count": 0}
 
 
 agent_tools = TransitAgentTools()

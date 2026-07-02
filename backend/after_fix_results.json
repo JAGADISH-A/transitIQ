@@ -1,0 +1,122 @@
+{
+  "chennai": [
+    {
+      "stop_id": "PER",
+      "stop_name": "PERAMBUR",
+      "match_tier": 1,
+      "match_score": 1149.0
+    },
+    {
+      "stop_id": "TBM",
+      "stop_name": "TAMBARAM",
+      "match_tier": 1,
+      "match_score": 1149.0
+    },
+    {
+      "stop_id": "MS",
+      "stop_name": "CHENNAI EGMORE",
+      "match_tier": 1,
+      "match_score": 1143.0
+    },
+    {
+      "stop_id": "MAS",
+      "stop_name": "PURATCHI THALAIVAR DR. MGR CTL",
+      "match_tier": 1,
+      "match_score": 1127.0
+    },
+    {
+      "stop_id": "MSF",
+      "stop_name": "CHENNAI FORT",
+      "match_tier": 4,
+      "match_score": 845.0
+    },
+    {
+      "stop_id": "MPK",
+      "stop_name": "CHENNAI PARK",
+      "match_tier": 4,
+      "match_score": 845.0
+    },
+    {
+      "stop_id": "MSB",
+      "stop_name": "CHENNAI BEACH",
+      "match_tier": 4,
+      "match_score": 844.0
+    },
+    {
+      "stop_id": "MSC",
+      "stop_name": "CHENNAI CHETPAT",
+      "match_tier": 4,
+      "match_score": 842.0
+    },
+    {
+      "stop_id": "MPKT",
+      "stop_name": "CHENNAI PARK TOWN",
+      "match_tier": 4,
+      "match_score": 840.0
+    },
+    {
+      "stop_id": "MASS",
+      "stop_name": "CHENNAI CENTRAL SUBURBAN STATION",
+      "match_tier": 4,
+      "match_score": 825.0
+    }
+  ],
+  "avadi": [
+    {
+      "stop_id": "AVD",
+      "stop_name": "AVADI",
+      "match_tier": 3,
+      "match_score": 950.0
+    },
+    {
+      "stop_id": "KRV",
+      "stop_name": "KARAVADI",
+      "match_tier": 6,
+      "match_score": 647.0
+    },
+    {
+      "stop_id": "LLD",
+      "stop_name": "LALAVADI",
+      "match_tier": 6,
+      "match_score": 647.0
+    },
+    {
+      "stop_id": "VKG",
+      "stop_name": "VAVADI KHURD",
+      "match_tier": 6,
+      "match_score": 643.0
+    },
+    {
+      "stop_id": "DC",
+      "stop_name": "MAGUDANCHAVADI",
+      "match_tier": 6,
+      "match_score": 641.0
+    },
+    {
+      "stop_id": "PVD",
+      "stop_name": "PEDDAVADIAPUDI",
+      "match_tier": 6,
+      "match_score": 641.0
+    },
+    {
+      "stop_id": "CVD",
+      "stop_name": "CHAVADIPALAIYAM",
+      "match_tier": 6,
+      "match_score": 640.0
+    },
+    {
+      "stop_id": "MRLA",
+      "stop_name": "MARIYAL GANGAVADI HA",
+      "match_tier": 6,
+      "match_score": 635.0
+    }
+  ],
+  "tiruninravur": [
+    {
+      "stop_id": "TI",
+      "stop_name": "TIRUNINRAVUR",
+      "match_tier": 3,
+      "match_score": 950.0
+    }
+  ]
+}

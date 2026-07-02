@@ -424,6 +424,8 @@ function App() {
         onSearch={handleSearch} 
         activeRoute={selectedRoute} 
         onRouteSelect={(r) => { setAppView('details'); handleRouteSelect(r); }}
+        tripStops={tripStops}
+        transferStops={transferStops}
       />
 
       {/* Global Alert Modal */}

@@ -7,12 +7,19 @@ from app.api.routes import router as routes_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.agent import router as agent_router
+from app.api.ai import router as ai_router
+from app.api.journey import router as journey_router
 
 from app.api.feeds import router as feeds_router
 from app.api.health import router as health_router
 from app.api.stops import router as stops_router
 from app.config import get_settings
 from app.services.transit_service import transit_service
+from app.providers.registry import provider_registry
+from app.providers.railway_provider import railway_provider
+from app.providers.bus_provider import bus_provider
+from app.providers.metro_provider import metro_provider
+from app.providers.ferry_provider import ferry_provider
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,11 +38,20 @@ async def lifespan(app: FastAPI):
         for feed_name in feeds:
             print(f"- {feed_name}")
         summary = transit_service.summary
-        print(f"✓ Loaded {summary.get('stops', 0)} stops")
-        print(f"✓ Loaded {summary.get('routes', 0)} routes")
-        print(f"✓ Loaded {summary.get('trips', 0)} trips")
-        print(f"✓ Loaded {summary.get('stop_times', 0)} stop_times")
-        print(f"✓ Loaded {summary.get('shapes', 0)} shapes")
+        print(f"[OK] Loaded {summary.get('stops', 0)} stops")
+        print(f"[OK] Loaded {summary.get('routes', 0)} routes")
+        print(f"[OK] Loaded {summary.get('trips', 0)} trips")
+        print(f"[OK] Loaded {summary.get('stop_times', 0)} stop_times")
+        print(f"[OK] Loaded {summary.get('shapes', 0)} shapes")
+
+        # Phase 5 — Register transport providers
+        provider_registry.register(railway_provider)
+        provider_registry.register(bus_provider)
+        provider_registry.register(metro_provider)
+        provider_registry.register(ferry_provider)
+        provider_count = len(provider_registry.list_providers())
+        print(f"[OK] Registered {provider_count} transport providers")
+
         print("TransitIQ Ready.")
     except Exception as exc:
         logger.warning("GTFS data unavailable during startup: %s", exc)
@@ -59,3 +75,5 @@ app.include_router(stops_router)
 app.include_router(feeds_router)
 app.include_router(routes_router)
 app.include_router(agent_router)
+app.include_router(ai_router)
+app.include_router(journey_router)

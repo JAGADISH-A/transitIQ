@@ -13,6 +13,10 @@
   <strong>An AI-powered railway route planning platform built for intelligent journey discovery and optimal transit scheduling.</strong>
 </p>
 
+<p align="center">
+  <a href="https://black-water-012dad100.7.azurestaticapps.net/" target="_blank"><strong>🔗 Live Demo Application</strong></a>
+</p>
+
 ---
 
 ## 🧐 The Problem & Our Solution

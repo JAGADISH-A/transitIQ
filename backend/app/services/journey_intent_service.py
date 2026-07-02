@@ -6,7 +6,7 @@ import re
 from datetime import datetime, timezone
 from typing import Optional
 
-from openai import OpenAI
+from groq import Groq
 
 from app.config import get_settings
 from app.models.schemas import JourneyIntentResponse, JourneyContext, IntentType
@@ -17,12 +17,9 @@ class JourneyIntentService:
     def __init__(self):
         self.settings = get_settings()
         self.client = None
-        if self.settings.FOUNDRY_API_KEY and self.settings.FOUNDRY_AZURE_OPENAI_ENDPOINT:
-            self.client = OpenAI(
-                base_url=self.settings.FOUNDRY_AZURE_OPENAI_ENDPOINT,
-                api_key=self.settings.FOUNDRY_API_KEY,
-            )
-        self.model = self.settings.FOUNDRY_MODEL_DEPLOYMENT
+        if self.settings.GROQ_API_KEY:
+            self.client = Groq(api_key=self.settings.GROQ_API_KEY)
+        self.model = self.settings.GROQ_MODEL
         
         # Pre-compile regex patterns for fast-path extraction (order matters — most specific first)
         self.regex_patterns = [

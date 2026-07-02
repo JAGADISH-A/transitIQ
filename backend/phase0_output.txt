@@ -1,0 +1,219 @@
+﻿Loading GTFS data...
+  Stops: 8,565
+  Trips: 10,074
+  Stop times: 195,799
+
+========================================================================
+  PHASE 0 ΓÇö STATION COMPLEX IMPACT ANALYSIS
+========================================================================
+
+========================================================================
+  COMPLEX: MSB Γåö MS (Chennai Beach Γåö Chennai Egmore)
+========================================================================
+
+  Stop Existence:
+    MSB (CHENNAI BEACH): Γ£ô EXISTS
+    MS (CHENNAI EGMORE): Γ£ô EXISTS
+
+  Physical Distance: 3670m (3.670 km)
+  Configured Walk: 950m / 10 minutes
+  ΓÜá WARNING: Configured distance (950m) is much smaller than actual (3670m)
+
+  Current Route Coverage:
+    MSB (CHENNAI BEACH): 291 routes
+    MS (CHENNAI EGMORE): 246 routes
+
+  Computing reachable stop sets (this may take a moment)...
+    Stops reachable FROM MSB: 119
+    Stops reachable FROM MS: 492
+    Stops that can reach MSB: 133
+    Stops that can reach MS: 520
+
+  New Destinations Unlocked:
+    Via MSBΓåÆwalkΓåÆMS: 435 additional stops
+      ΓåÆ NLDA (NALGONDA)
+      ΓåÆ UDL (ANDAL JN.)
+      ΓåÆ RC (RAICHUR)
+      ΓåÆ KYJ (KAYANKULAM JN)
+      ΓåÆ MBNR (MAHBUBNAGAR)
+      ΓåÆ SJP (SHUJALPUR)
+      ΓåÆ TJ (THANJAVUR JN.)
+      ΓåÆ VSKP (VISAKHAPATNAM)
+      ΓåÆ SC (SECUNDERABAD JN)
+      ΓåÆ DD (DAUND JN)
+      ... and 425 more
+    Via MSΓåÆwalkΓåÆMSB: 62 additional stops
+      ΓåÆ CTRE (CHITTERI)
+      ΓåÆ SPAM (SENJI PANAMBAKKAM)
+      ΓåÆ TI (TIRUNINRAVUR)
+      ΓåÆ VEU (VEPPAMPATTU)
+      ΓåÆ PEW (PERAMBUR LOCO WORKS)
+      ΓåÆ MCPK (CHEPAUK)
+      ΓåÆ GWYR (GREENWAYS ROAD)
+      ΓåÆ TMVL (TIRUMULLAIVAYIL)
+      ΓåÆ KBT (KADAMBATTUR)
+      ΓåÆ TO (TIRUVALANGADU)
+      ... and 52 more
+
+  Source Stops That Gain New Connectivity:
+    Stops that can reach MSB but NOT MS: 36 sources gain access via MSBΓåÆwalkΓåÆMS
+    Stops that can reach MS but NOT MSB: 423 sources gain access via MSΓåÆwalkΓåÆMSB
+      ΓåÉ AKAT (AKKAMPET)
+      ΓåÉ PEW (PERAMBUR LOCO WORKS)
+      ΓåÉ MCPK (CHEPAUK)
+      ΓåÉ GWYR (GREENWAYS ROAD)
+      ΓåÉ TMVL (TIRUMULLAIVAYIL)
+      ΓåÉ TRMN (THARAMANI)
+      ΓåÉ MTCN (TIRUVALLIKENI)
+      ΓåÉ AKM (ARAMBAKKAM)
+
+========================================================================
+  COMPLEX: MAS Γåö MASS (Chennai Central Γåö Chennai Central Suburban)
+========================================================================
+
+  Stop Existence:
+    MAS (PURATCHI THALAIVAR DR. MGR CTL): Γ£ô EXISTS
+    MASS (CHENNAI CENTRAL SUBURBAN STATION): Γ£ô EXISTS
+
+  Physical Distance: 245m (0.245 km)
+  Configured Walk: 400m / 5 minutes
+
+  Current Route Coverage:
+    MAS (PURATCHI THALAIVAR DR. MGR CTL): 168 routes
+    MASS (CHENNAI CENTRAL SUBURBAN STATION): 240 routes
+
+  Computing reachable stop sets (this may take a moment)...
+    Stops reachable FROM MAS: 498
+    Stops reachable FROM MASS: 62
+    Stops that can reach MAS: 498
+    Stops that can reach MASS: 56
+
+  New Destinations Unlocked:
+    Via MASΓåÆwalkΓåÆMASS: 43 additional stops
+      ΓåÆ SPAM (SENJI PANAMBAKKAM)
+      ΓåÆ VEU (VEPPAMPATTU)
+      ΓåÆ AKAT (AKKAMPET)
+      ΓåÆ PEW (PERAMBUR LOCO WORKS)
+      ΓåÆ KOK (KORUKKUPET JN)
+      ΓåÆ NPKM (NANDIYAMPAKKAM)
+      ΓåÆ TMVL (TIRUMULLAIVAYIL)
+      ΓåÆ AIP (ATTIPPATTU)
+      ΓåÆ AKM (ARAMBAKKAM)
+      ΓåÆ PRES (PATTABIRAM E DEPOT)
+      ... and 33 more
+    Via MASSΓåÆwalkΓåÆMAS: 479 additional stops
+      ΓåÆ NLDA (NALGONDA)
+      ΓåÆ CTRE (CHITTERI)
+      ΓåÆ AKT (AKALTARA)
+      ΓåÆ RC (RAICHUR)
+      ΓåÆ KYJ (KAYANKULAM JN)
+      ΓåÆ MBNR (MAHBUBNAGAR)
+      ΓåÆ SJP (SHUJALPUR)
+      ΓåÆ VSKP (VISAKHAPATNAM)
+      ΓåÆ KPD (KATPADI JN)
+      ΓåÆ BPA (BELAMPALLI)
+      ... and 469 more
+
+  Source Stops That Gain New Connectivity:
+    Stops that can reach MAS but NOT MASS: 483 sources gain access via MASΓåÆwalkΓåÆMASS
+    Stops that can reach MASS but NOT MAS: 41 sources gain access via MASSΓåÆwalkΓåÆMAS
+      ΓåÉ NLDA (NALGONDA)
+      ΓåÉ CTRE (CHITTERI)
+      ΓåÉ AKT (AKALTARA)
+      ΓåÉ RC (RAICHUR)
+      ΓåÉ KYJ (KAYANKULAM JN)
+      ΓåÉ MBNR (MAHBUBNAGAR)
+      ΓåÉ SJP (SHUJALPUR)
+      ΓåÉ VSKP (VISAKHAPATNAM)
+
+========================================================================
+  COMPLEX: NCJ Γåö NJT (Nagercoil Junction Γåö Nagercoil Town)
+========================================================================
+
+  Stop Existence:
+    NCJ (NAGERCOIL JUNCTION): Γ£ô EXISTS
+    NJT (NAGER COIL TOWN): Γ£ô EXISTS
+
+  Physical Distance: 3863m (3.863 km)
+  Configured Walk: 2500m / 30 minutes
+
+  Current Route Coverage:
+    NCJ (NAGERCOIL JUNCTION): 72 routes
+    NJT (NAGER COIL TOWN): 28 routes
+
+  Computing reachable stop sets (this may take a moment)...
+    Stops reachable FROM NCJ: 373
+    Stops reachable FROM NJT: 162
+    Stops that can reach NCJ: 374
+    Stops that can reach NJT: 158
+
+  New Destinations Unlocked:
+    Via NCJΓåÆwalkΓåÆNJT: 23 additional stops
+      ΓåÆ BSP (BILASPUR JN.)
+      ΓåÆ MMK (MADURANTAKAM)
+      ΓåÆ DGG (DONGARGARH)
+      ΓåÆ BYT (BHATAPARA)
+      ΓåÆ PNQ (PUNKUNNAM)
+      ΓåÆ SGR (SANGAMESHWAR ROAD)
+      ΓåÆ GUV (GURUVAYUR)
+      ΓåÆ AMPA (AMBALAPPUZHA)
+      ΓåÆ RJT (RAJKOT)
+      ΓåÆ HAPA (HAPA)
+      ... and 13 more
+    Via NJTΓåÆwalkΓåÆNCJ: 234 additional stops
+      ΓåÆ NLDA (NALGONDA)
+      ΓåÆ STA (SATNA)
+      ΓåÆ AD (ADONI)
+      ΓåÆ RC (RAICHUR)
+      ΓåÆ MBNR (MAHBUBNAGAR)
+      ΓåÆ IGU (IRUGUR)
+      ΓåÆ TJ (THANJAVUR JN.)
+      ΓåÆ VSKP (VISAKHAPATNAM)
+      ΓåÆ SC (SECUNDERABAD JN)
+      ΓåÆ KOJ (KOKRAJHAR)
+      ... and 224 more
+
+  Source Stops That Gain New Connectivity:
+    Stops that can reach NCJ but NOT NJT: 240 sources gain access via NCJΓåÆwalkΓåÆNJT
+    Stops that can reach NJT but NOT NCJ: 24 sources gain access via NJTΓåÆwalkΓåÆNCJ
+      ΓåÉ NLDA (NALGONDA)
+      ΓåÉ NRK (NARAIKKINAR)
+      ΓåÉ STA (SATNA)
+      ΓåÉ AD (ADONI)
+      ΓåÉ RC (RAICHUR)
+      ΓåÉ MBNR (MAHBUBNAGAR)
+      ΓåÉ IGU (IRUGUR)
+      ΓåÉ TJ (THANJAVUR JN.)
+
+========================================================================
+  EXPECTED ROUTE UNLOCKS ΓÇö Test Cases
+========================================================================
+
+  Route                                           Direct   1-Transfer   Walk-Transfer Status
+  --------------------------------------------- -------- ------------ --------------- --------------------
+  Hindu College ΓåÆ Nagercoil Town                       Γ£ù            Γ£ù               Γ£ô  ≡ƒåò NEWLY UNLOCKED
+  Hindu College ΓåÆ Madurai                              Γ£ù            Γ£ô               Γ£ô  Γ£ô ALREADY WORKS (transfer)
+  Hindu College ΓåÆ Tirunelveli                          Γ£ù            Γ£ô               Γ£ô  Γ£ô ALREADY WORKS (transfer)
+  Hindu College ΓåÆ Salem                                Γ£ù            Γ£ô               Γ£ô  Γ£ô ALREADY WORKS (transfer)
+  Hindu College ΓåÆ Coimbatore                           Γ£ù            Γ£ô               Γ£ô  Γ£ô ALREADY WORKS (transfer)
+  Perambur Loco Works ΓåÆ Nagercoil Town                 ?            ?               ? STOP MISSING
+  Mambalam ΓåÆ Nagercoil Town                            Γ£ù            Γ£ô               Γ£ô  Γ£ô ALREADY WORKS (transfer)
+
+========================================================================
+  FALSE POSITIVE RISK ASSESSMENT
+========================================================================
+
+  False positives = routes that technically appear valid via walking but
+  are not operationally sensible (too far, wrong direction, etc.)
+
+  MSB_MS: Risk=MEDIUM
+    ΓÇó distance 3670m > 2km (requires auto/taxi, not true walking)
+  MAS_MASS: Risk=LOW
+    ΓÇó short distance, well-established interchange
+  NCJ_NJT: Risk=MEDIUM
+    ΓÇó distance 3863m > 2km (requires auto/taxi, not true walking)
+    ΓÇó walk time 30 min is significant
+
+========================================================================
+  SUMMARY
+========================================================================

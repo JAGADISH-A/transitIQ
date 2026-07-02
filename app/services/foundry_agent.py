@@ -1,11 +1,11 @@
-"""Microsoft Foundry / Azure AI Foundry tool-calling integration for TransitIQ.
+"""Groq API tool-calling integration for TransitIQ.
 
 This service keeps the existing FastAPI and TransitAgentTools architecture intact,
-while adding a Foundry-compatible tool-calling layer powered by the Azure AI
-Projects SDK. The model can decide which transit tool to invoke, and this class
-executes those tool calls and returns a final natural-language response.
+while adding a Groq-compatible tool-calling layer. The model can decide which
+transit tool to invoke, and this class executes those tool calls and returns a
+final natural-language response.
 
-Recovery: GPT-OSS-120B occasionally fails to emit proper OpenAI tool_calls,
+Recovery: Some models occasionally fail to emit proper OpenAI tool_calls,
 placing the intended tool name and JSON arguments inside reasoning_content
 instead. The _recover_from_reasoning() method detects this condition and
 re-routes the call through the normal execute_tool_call path.
@@ -18,11 +18,14 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
-from openai import OpenAI
+from groq import Groq
 
 from app.config import get_settings
 from app.services.agent_tools import agent_tools
 from app.services.ai_planner import ai_planner
+from app.services.transit_service import transit_service
+from app.services.session_manager import session_manager
+from app.services.context_builder import build_ai_context_string
 
 
 # ---------------------------------------------------------------------------
@@ -34,6 +37,9 @@ _KNOWN_TOOLS = frozenset({
     "search_stops_in_feed",
     "nearby_stops",
     "find_trip",
+    "get_available_providers",
+    "search_stops_all_modes",
+    "find_multi_modal_journey",
 })
 
 # Pre-compiled regex: match a known tool name mentioned in free text
@@ -104,53 +110,37 @@ _FEED_IN_PROSE_PATTERN = re.compile(
 
 
 class FoundryTransitAgent:
-    """Use Azure AI Foundry tool-calling to answer transit questions.
+    """Use Groq API tool-calling to answer transit questions.
 
     The service intentionally uses the existing TransitAgentTools wrapper as the
-    source of truth for GTFS lookups. Foundry only decides which tool to call and
+    source of truth for GTFS lookups. Groq only decides which tool to call and
     receives structured outputs back from the tool layer.
     """
 
-    def __init__(self, project_endpoint: Optional[str] = None, model_deployment: Optional[str] = None) -> None:
-        """Initialize the Foundry integration.
+    def __init__(self, model: Optional[str] = None) -> None:
+        """Initialize the Groq integration.
 
         Args:
-            project_endpoint: Azure AI Foundry project endpoint. If omitted,
-                the value is read from environment settings.
-            model_deployment: Model deployment name for the Foundry chat model.
-                If omitted, the setting value is used or a safe default is chosen.
+            model: Groq model name. If omitted, the setting value is used
+                or a safe default is chosen.
         """
         self.logger = logging.getLogger(__name__)
         settings = get_settings()
-        
 
-        self.project_endpoint = project_endpoint or getattr(settings, "FOUNDRY_PROJECT_ENDPOINT", None)
-        self.openai_endpoint = getattr(settings, "FOUNDRY_AZURE_OPENAI_ENDPOINT", None)
-        
-        if not self.openai_endpoint:
-            self.openai_endpoint = getattr(settings, "FOUNDRY_PROJECT_OPENAI_ENDPOINT", None)
-        if not self.openai_endpoint:
-            self.openai_endpoint = self.project_endpoint
-        self.model_deployment = model_deployment or getattr(settings, "FOUNDRY_MODEL_DEPLOYMENT", "gpt-4o-mini")
-        self._openai_client = None
+        self.api_key = settings.GROQ_API_KEY
+        self.model = model or settings.GROQ_MODEL
+        self._client = None
 
-        print("OPENAI_ENDPOINT =", self.openai_endpoint)
-        print("DEPLOYMENT =", self.model_deployment)
-        print("API_KEY_PRESENT =", bool(settings.FOUNDRY_API_KEY))
+        self.logger.info("Using Groq model: %s", self.model)
+        self.logger.info("GROQ_API_KEY present: %s", bool(self.api_key))
 
-        self.logger.info("Using Azure OpenAI endpoint: %s", self.openai_endpoint)
-        self.logger.info("Using deployment: %s", self.model_deployment)
-
-        if self.openai_endpoint:
+        if self.api_key:
             try:
-                self._openai_client = OpenAI(
-                    base_url=self.openai_endpoint,
-                    api_key=settings.FOUNDRY_API_KEY,
-                )
-                self.logger.info("Foundry client initialized for endpoint %s", self.openai_endpoint)
-            except Exception as exc:  # pragma: no cover - runtime integration path
-                self.logger.warning("Foundry client initialization failed: %s", exc)
-                self._openai_client = None
+                self._client = Groq(api_key=self.api_key)
+                self.logger.info("Groq client initialized.")
+            except Exception as exc:
+                self.logger.warning("Groq client initialization failed: %s", exc)
+                self._client = None
 
     def _fast_path_route(self, user_query: str) -> Optional[Dict[str, Any]]:
         """Intent Router to bypass reasoning for simple transit lookups."""
@@ -255,7 +245,72 @@ class FoundryTransitAgent:
     # ------------------------------------------------------------------
 
     def tool_definitions(self) -> List[Dict[str, Any]]:
-        """Return the JSON-schema tool definitions exposed to the model."""
+        """Return the JSON-schema tool definitions exposed to the model.
+
+        Dynamically injects available feed names so the model never invents them.
+        If only one feed exists, the feed parameter is removed from tools that
+        require it (automatically filled at execution time).
+        """
+        valid_feeds = self._get_valid_feeds()
+        feed_list_str = ", ".join(valid_feeds) if valid_feeds else "none loaded"
+        single_feed = valid_feeds[0] if len(valid_feeds) == 1 else None
+
+        # tool shared for search_stops_in_feed and nearby_stops
+        if single_feed:
+            feed_param_description = f"(auto-filled: only feed '{single_feed}' is available)"
+        else:
+            feed_param_description = f"Must be one of: {feed_list_str}"
+
+        # search_stops_in_feed: conditionally include feed parameter
+        search_stops_in_feed_params = {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Text to search in stop names or IDs.",
+                },
+            },
+            "required": ["query"],
+            "additionalProperties": False,
+        }
+        if not single_feed:
+            search_stops_in_feed_params["properties"]["feed"] = {
+                "type": "string",
+                "minLength": 1,
+                "description": feed_param_description,
+            }
+            search_stops_in_feed_params["required"] = ["query", "feed"]
+
+        # nearby_stops: conditionally include feed parameter
+        nearby_stops_params = {
+            "type": "object",
+            "properties": {
+                "lat": {
+                    "type": "number",
+                    "description": "Latitude in decimal degrees.",
+                },
+                "lon": {
+                    "type": "number",
+                    "description": "Longitude in decimal degrees.",
+                },
+                "radius_km": {
+                    "type": "number",
+                    "description": "Search radius in kilometers.",
+                    "default": 2.0,
+                },
+            },
+            "required": ["lat", "lon"],
+            "additionalProperties": False,
+        }
+        if not single_feed:
+            nearby_stops_params["properties"]["feed"] = {
+                "type": "string",
+                "minLength": 1,
+                "description": feed_param_description,
+            }
+            nearby_stops_params["required"] = ["feed", "lat", "lon"]
+
         return [
             {
                 "type": "function",
@@ -315,22 +370,28 @@ class FoundryTransitAgent:
                 "type": "function",
                 "function": {
                     "name": "search_stops_in_feed",
-                    "description": "Find transit stops within one specific GTFS feed.",
+                    "description": f"Find transit stops within one specific GTFS feed.{' (feed auto-filled)' if single_feed else ''}",
+                    "parameters": search_stops_in_feed_params,
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "nearby_stops",
+                    "description": f"Find nearby stops for a feed and coordinate pair.{' (feed auto-filled)' if single_feed else ''}",
+                    "parameters": nearby_stops_params,
+                },
+            },
+            # --- Phase 5: Multi-modal transport tools ---
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_available_providers",
+                    "description": "List all available transport providers (rail, bus, metro, ferry) and their status.",
                     "parameters": {
                         "type": "object",
-                        "properties": {
-                            "query": {
-                                "type": "string",
-                                "minLength": 1,
-                                "description": "Text to search in stop names or IDs.",
-                            },
-                            "feed": {
-                                "type": "string",
-                                "minLength": 1,
-                                "description": "The GTFS feed name to search in.",
-                            },
-                        },
-                        "required": ["query", "feed"],
+                        "properties": {},
+                        "required": [],
                         "additionalProperties": False,
                     },
                 },
@@ -338,31 +399,56 @@ class FoundryTransitAgent:
             {
                 "type": "function",
                 "function": {
-                    "name": "nearby_stops",
-                    "description": "Find nearby stops for a feed and coordinate pair.",
+                    "name": "search_stops_all_modes",
+                    "description": "Search stops across ALL transport modes (rail, bus, metro, ferry) by name or ID.",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "feed": {
+                            "query": {
                                 "type": "string",
                                 "minLength": 1,
-                                "description": "The GTFS feed name.",
-                            },
-                            "lat": {
-                                "type": "number",
-                                "description": "Latitude in decimal degrees.",
-                            },
-                            "lon": {
-                                "type": "number",
-                                "description": "Longitude in decimal degrees.",
-                            },
-                            "radius_km": {
-                                "type": "number",
-                                "description": "Search radius in kilometers.",
-                                "default": 2.0,
-                            },
+                                "description": "Text to search for in stop names or IDs.",
+                            }
                         },
-                        "required": ["feed", "lat", "lon"],
+                        "required": ["query"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "find_multi_modal_journey",
+                    "description": "Plan a multi-modal journey combining rail, bus, metro, and ferry. Provide source and destination stop names.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "source": {
+                                "type": "string",
+                                "description": "Source stop name or location."
+                            },
+                            "destination": {
+                                "type": "string",
+                                "description": "Destination stop name or location."
+                            },
+                            "preferences": {
+                                "type": "object",
+                                "description": "Optional transport preferences (e.g., avoid buses, use only trains).",
+                                "properties": {
+                                    "avoided_modes": {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                        "description": "Modes to avoid: RAIL, BUS, METRO, FERRY"
+                                    },
+                                    "preferred_modes": {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                        "description": "Only use these modes: RAIL, BUS, METRO, FERRY"
+                                    }
+                                }
+                            }
+                        },
+                        "required": ["source", "destination"],
                         "additionalProperties": False,
                     },
                 },
@@ -381,21 +467,49 @@ class FoundryTransitAgent:
             "search_stops_in_feed": agent_tools.search_stops_in_feed,
             "nearby_stops": agent_tools.nearby_stops,
             "find_trip": agent_tools.find_trip,
+            "get_available_providers": agent_tools.get_available_providers,
+            "search_stops_all_modes": agent_tools.search_stops_all_modes,
+            "find_multi_modal_journey": agent_tools.find_multi_modal_journey,
         }
         if name not in handlers:
             raise ValueError(f"Unsupported tool '{name}'.")
         return handlers[name]
 
+    def _get_valid_feeds(self) -> List[str]:
+        feeds = transit_service.available_feeds()
+        return feeds if feeds else []
+
     def execute_tool_call(self, tool_call: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a model-requested function call and return the tool result.
 
-        The returned structure is compatible with the OpenAI/Foundry tool-calling
+        The returned structure is compatible with the OpenAI/Groq tool-calling
         protocol, so the model can continue reasoning over the structured output.
         """
         try:
             tool_name = (tool_call.get("function") or {}).get("name")
             raw_arguments = (tool_call.get("function") or {}).get("arguments", "{}")
+            if raw_arguments is None or raw_arguments == "null":
+                raw_arguments = "{}"
             arguments = json.loads(raw_arguments) if isinstance(raw_arguments, str) else raw_arguments
+            if arguments is None:
+                arguments = {}
+
+            # If only one feed loaded, auto-fill feed parameters
+            valid_feeds = self._get_valid_feeds()
+            if len(valid_feeds) == 1:
+                single_feed = valid_feeds[0]
+                if tool_name in ("search_stops_in_feed", "nearby_stops") and "feed" not in arguments:
+                    arguments["feed"] = single_feed
+
+            # Validate feed names before dispatching
+            if tool_name in ("search_stops_in_feed", "nearby_stops"):
+                feed_arg = arguments.get("feed", "")
+                if feed_arg and valid_feeds and feed_arg not in valid_feeds:
+                    return {
+                        "role": "tool",
+                        "tool_call_id": tool_call.get("id"),
+                        "content": json.dumps({"error": f"Feed '{feed_arg}' not found. Available feeds: {valid_feeds}"}),
+                    }
 
             handler = self._tool_handler(tool_name)
             result = handler(**arguments)
@@ -414,7 +528,7 @@ class FoundryTransitAgent:
             }
 
     # ------------------------------------------------------------------
-    # Reasoning-content recovery (GPT-OSS-120B workaround)
+    # Reasoning-content recovery (model workaround)
     # ------------------------------------------------------------------
 
     def _recover_from_reasoning(
@@ -613,10 +727,10 @@ class FoundryTransitAgent:
     # ------------------------------------------------------------------
 
     def answer(self, user_query: str) -> Dict[str, Any]:
-        """Answer the user query using Foundry tool-calling when available.
+        """Answer the user query using Groq tool-calling when available.
 
-        If the Foundry project endpoint is not configured, the method falls back to
-        the existing planner logic so the API remains usable in local development.
+        If no Groq API key is configured, the method falls back to the existing
+        planner logic so the API remains usable in local development.
         """
         start_time = time.perf_counter()
 
@@ -636,19 +750,45 @@ class FoundryTransitAgent:
         if not isinstance(user_query, str) or not user_query.strip():
             return {"answer": "I can help with transit questions. Please provide a destination or location query.", "provider": "local"}
 
-        if self._openai_client is None:
-            print("OPENAI CLIENT IS NONE")
-            self.logger.warning("Foundry client unavailable; using local planner fallback for query '%s'", user_query)
+        if self._client is None:
+            print("GROQ CLIENT IS NONE")
+            self.logger.warning("Groq client unavailable; using local planner fallback for query '%s'", user_query)
             return {
                 "answer": ai_planner.answer_query(user_query).get("answer", "I could not find a matching destination."),
                 "provider": "local",
             }
 
+        valid_feeds = self._get_valid_feeds()
+        feed_list_str = ", ".join(valid_feeds) if valid_feeds else "none"
+        single_feed = valid_feeds[0] if len(valid_feeds) == 1 else None
+
+        if single_feed:
+            feed_instruction = (
+                f"The only available GTFS feed is '{single_feed}'. "
+                f"All queries use this feed automatically. Do NOT ask the user to specify a feed."
+            )
+        else:
+            feed_instruction = (
+                f"Available GTFS feeds: {feed_list_str}. "
+                f"You MUST only use these exact feed names in tool calls. "
+                f"Do NOT invent feed names."
+            )
+
+        # Inject persistent journey context if one exists
+        journey_context_block = build_ai_context_string()
+        journey_section = (
+            f"\n\n{journey_context_block}\n\n"
+            if journey_context_block
+            else ""
+        )
+
         system_prompt = (
-            "You are TransitIQ, a helpful transit assistant. "
-            "Use the available GTFS tools to answer questions about stops, feeds, and nearby locations. "
-            "Use find_trip when the user asks how to travel from one stop to another. "
+            "You are TransitIQ, a helpful unified transit intelligence assistant. "
+            "Use the available tools to answer questions about rail, bus, metro, and ferry transport. "
+            "Use find_trip for railway journeys, find_multi_modal_journey for combined transport modes. "
             "Prefer concise, natural-language answers based on the tool results.\n\n"
+            f"FEED INFORMATION:\n{feed_instruction}\n\n"
+            f"{journey_section}"
             "CRITICAL TOOL-CALLING RULES:\n"
             "- When you need external data, you MUST emit a proper tool_call using the OpenAI function-calling format.\n"
             "- NEVER write tool names or JSON arguments inside your reasoning or response text.\n"
@@ -665,20 +805,20 @@ class FoundryTransitAgent:
 
         tool_calls_used: List[str] = []
         successful_tool_results: List[tuple] = []
-        final_answer = "I could not generate a response from the Foundry model."
+        final_answer = "I could not generate a response from the model."
 
         print(f"\n{'='*60}")
-        print(f"[FOUNDRY-DIAG] START query={user_query!r}")
+        print(f"[GROQ-DIAG] START query={user_query!r}")
         print(f"{'='*60}")
 
         iteration = 0
         for _ in range(5):
             iteration += 1
-            print(f"\n[FOUNDRY-DIAG] --- Loop iteration {iteration} ---")
-            print(f"[FOUNDRY-DIAG] Messages count before call: {len(messages)}")
+            print(f"\n[GROQ-DIAG] --- Loop iteration {iteration} ---")
+            print(f"[GROQ-DIAG] Messages count before call: {len(messages)}")
 
-            response = self._openai_client.chat.completions.create(
-                model=self.model_deployment,
+            response = self._client.chat.completions.create(
+                model=self.model,
                 messages=messages,
                 tools=self.tool_definitions(),
                 tool_choice="auto",
@@ -686,32 +826,32 @@ class FoundryTransitAgent:
             )
 
             # --- Diagnostic: completion object ---
-            print(f"[FOUNDRY-DIAG] COMPLETION (iter {iteration}) = {response}")
-            print(f"[FOUNDRY-DIAG] choices count = {len(response.choices) if response.choices else 0}")
+            print(f"[GROQ-DIAG] COMPLETION (iter {iteration}) = {response}")
+            print(f"[GROQ-DIAG] choices count = {len(response.choices) if response.choices else 0}")
 
             if not response.choices:
-                print(f"[FOUNDRY-DIAG] *** WARNING: response.choices is empty/None! ***")
+                print(f"[GROQ-DIAG] *** WARNING: response.choices is empty/None! ***")
 
             message = response.choices[0].message
             finish_reason = response.choices[0].finish_reason
-            print(f"[FOUNDRY-DIAG] MESSAGE (iter {iteration}) = {message}")
-            print(f"[FOUNDRY-DIAG] finish_reason  = {finish_reason}")
-            print(f"[FOUNDRY-DIAG] message.role    = {getattr(message, 'role', 'N/A')}")
-            print(f"[FOUNDRY-DIAG] message.content = {getattr(message, 'content', 'N/A')!r}")
-            print(f"[FOUNDRY-DIAG] message.content type = {type(getattr(message, 'content', None))}")
-            print(f"[FOUNDRY-DIAG] message.tool_calls = {getattr(message, 'tool_calls', 'N/A')}")
+            print(f"[GROQ-DIAG] MESSAGE (iter {iteration}) = {message}")
+            print(f"[GROQ-DIAG] finish_reason  = {finish_reason}")
+            print(f"[GROQ-DIAG] message.role    = {getattr(message, 'role', 'N/A')}")
+            print(f"[GROQ-DIAG] message.content = {getattr(message, 'content', 'N/A')!r}")
+            print(f"[GROQ-DIAG] message.content type = {type(getattr(message, 'content', None))}")
+            print(f"[GROQ-DIAG] message.tool_calls = {getattr(message, 'tool_calls', 'N/A')}")
 
-            # Check for reasoning_content (GPT-OSS extended field)
+            # Check for reasoning_content
             reasoning_content = getattr(message, "reasoning_content", None) or ""
             if reasoning_content:
-                print(f"[FOUNDRY-DIAG] reasoning_content present ({len(reasoning_content)} chars)")
-                print(f"[FOUNDRY-DIAG] reasoning_content = {reasoning_content!r:.500}")
+                print(f"[GROQ-DIAG] reasoning_content present ({len(reasoning_content)} chars)")
+                print(f"[GROQ-DIAG] reasoning_content = {reasoning_content!r:.500}")
 
             assistant_message = message.model_dump(exclude_none=True) if hasattr(message, "model_dump") else {
                 "role": getattr(message, "role", "assistant"),
                 "content": getattr(message, "content", None),
             }
-            print(f"[FOUNDRY-DIAG] assistant_message appended = {assistant_message}")
+            print(f"[GROQ-DIAG] assistant_message appended = {assistant_message}")
             messages.append(assistant_message)
 
             self.logger.info(f"COMPLETION FINISH_REASON: {finish_reason}")
@@ -720,8 +860,8 @@ class FoundryTransitAgent:
             self.logger.info(f"COMPLETION REASONING: {reasoning_content}")
 
             tool_calls = getattr(message, "tool_calls", None) or []
-            print(f"[FOUNDRY-DIAG] TOOL CALLS (iter {iteration}) = {tool_calls}")
-            print(f"[FOUNDRY-DIAG] tool_calls count = {len(tool_calls)}")
+            print(f"[GROQ-DIAG] TOOL CALLS (iter {iteration}) = {tool_calls}")
+            print(f"[GROQ-DIAG] tool_calls count = {len(tool_calls)}")
 
             if not tool_calls:
                 raw_content = getattr(message, "content", None)
@@ -734,7 +874,7 @@ class FoundryTransitAgent:
                     print(f"[RECOVERY] finish_reason={finish_reason}, content={raw_content!r}")
                     print(f"[RECOVERY] reasoning_content detected ({len(reasoning_content)} chars)")
                     self.logger.warning(
-                        "[RECOVERY] GPT-OSS reasoning_content fallback triggered for query '%s'",
+                        "[RECOVERY] reasoning_content fallback triggered for query '%s'",
                         user_query,
                     )
 
@@ -810,34 +950,32 @@ class FoundryTransitAgent:
                         )
 
                 # Normal exit: model returned text content (or nothing)
-                print(f"[FOUNDRY-DIAG] No tool calls — extracting final answer")
-                print(f"[FOUNDRY-DIAG] raw message.content = {raw_content!r}")
-                print(f"[FOUNDRY-DIAG] bool(raw_content)   = {bool(raw_content)}")
+                print(f"[GROQ-DIAG] No tool calls — extracting final answer")
+                print(f"[GROQ-DIAG] raw message.content = {raw_content!r}")
+                print(f"[GROQ-DIAG] bool(raw_content)   = {bool(raw_content)}")
                 
-                # FIX: If raw_content is falsy, but reasoning_content has text (and we didn't recover a tool),
-                # use reasoning_content as the final answer instead of falling back to default error.
                 if not raw_content and reasoning_content:
                     final_answer = reasoning_content
                 else:
                     final_answer = raw_content or final_answer
                 
-                print(f"[FOUNDRY-DIAG] final_answer after assignment = {final_answer!r}")
-                if final_answer == "I could not generate a response from the Foundry model.":
-                    print(f"[FOUNDRY-DIAG] *** BUG HIT: content was falsy, fell back to default error string ***")
-                    print(f"[FOUNDRY-DIAG] *** completion object  = {response} ***")
-                    print(f"[FOUNDRY-DIAG] *** choices count      = {len(response.choices) if response.choices else 0} ***")
-                    print(f"[FOUNDRY-DIAG] *** message.content    = {getattr(message, 'content', None)!r} ***")
-                    print(f"[FOUNDRY-DIAG] *** message.tool_calls = {getattr(message, 'tool_calls', None)} ***")
-                    print(f"[FOUNDRY-DIAG] *** reasoning_content  = {reasoning_content!r:.500} ***")
+                print(f"[GROQ-DIAG] final_answer after assignment = {final_answer!r}")
+                if final_answer == "I could not generate a response from the model.":
+                    print(f"[GROQ-DIAG] *** BUG HIT: content was falsy, fell back to default error string ***")
+                    print(f"[GROQ-DIAG] *** completion object  = {response} ***")
+                    print(f"[GROQ-DIAG] *** choices count      = {len(response.choices) if response.choices else 0} ***")
+                    print(f"[GROQ-DIAG] *** message.content    = {getattr(message, 'content', None)!r} ***")
+                    print(f"[GROQ-DIAG] *** message.tool_calls = {getattr(message, 'tool_calls', None)} ***")
+                    print(f"[GROQ-DIAG] *** reasoning_content  = {reasoning_content!r:.500} ***")
                 break
 
             for tool_call in tool_calls:
                 tool_name = getattr(getattr(tool_call, "function", None), "name", None)
-                print(f"[FOUNDRY-DIAG] Executing tool: {tool_name}")
+                print(f"[GROQ-DIAG] Executing tool: {tool_name}")
                 if tool_name:
                     tool_calls_used.append(tool_name)
                 tool_result = self.execute_tool_call(tool_call.model_dump() if hasattr(tool_call, "model_dump") else tool_call)
-                print(f"[FOUNDRY-DIAG] TOOL RESULT ({tool_name}) = {tool_result}")
+                print(f"[GROQ-DIAG] TOOL RESULT ({tool_name}) = {tool_result}")
                 messages.append(tool_result)
 
                 try:
@@ -847,10 +985,10 @@ class FoundryTransitAgent:
                 except Exception:
                     pass
         else:
-            print(f"[FOUNDRY-DIAG] *** Exhausted max iterations (5) ***")
+            print(f"[GROQ-DIAG] *** Exhausted max iterations (5) ***")
             self.logger.warning("Reached maximum tool-calling iterations for query '%s'", user_query)
 
-        if final_answer == "I could not generate a response from the Foundry model." and successful_tool_results:
+        if final_answer == "I could not generate a response from the model." and successful_tool_results:
             print("[FALLBACK] Building response from tool results")
             self.logger.info("[FALLBACK] Building response from tool results")
             
@@ -881,21 +1019,21 @@ class FoundryTransitAgent:
                 print("[FALLBACK] Generated fallback answer")
                 self.logger.info("[FALLBACK] Generated fallback answer")
 
-        print(f"\n[FOUNDRY-DIAG] === RETURNING ===")
-        print(f"[FOUNDRY-DIAG] final_answer   = {final_answer!r}")
-        print(f"[FOUNDRY-DIAG] tools_used     = {tool_calls_used}")
-        print(f"[FOUNDRY-DIAG] is_default_err = {final_answer == 'I could not generate a response from the Foundry model.'}")
+        print(f"\n[GROQ-DIAG] === RETURNING ===")
+        print(f"[GROQ-DIAG] final_answer   = {final_answer!r}")
+        print(f"[GROQ-DIAG] tools_used     = {tool_calls_used}")
+        print(f"[GROQ-DIAG] is_default_err = {final_answer == 'I could not generate a response from the model.'}")
         print(f"{'='*60}\n")
 
         self.logger.info(f"RETURN ITERATION: {iteration}")
         self.logger.info(f"RETURN FINAL_ANSWER: {final_answer}")
         self.logger.info(f"RETURN TOOLS_USED: {tool_calls_used}")
-        self.logger.info(f"RETURN PROVIDER: foundry")
+        self.logger.info(f"RETURN PROVIDER: groq")
 
         elapsed_ms = int((time.perf_counter() - start_time) * 1000)
         return {
             "answer": final_answer,
-            "provider": "foundry",
+            "provider": "groq",
             "tools_used": tool_calls_used,
             "classification": "REASONING_PATH",
             "execution_time_ms": elapsed_ms,

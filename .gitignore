@@ -1,5 +1,5 @@
 # ==========================================
-# Python / FastAPI Core Ignored Files
+# Python
 # ==========================================
 __pycache__/
 *.py[cod]
@@ -18,31 +18,25 @@ parts/
 sdist/
 var/
 wheels/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-manifest
-spec
 
 # ==========================================
 # Virtual Environments
 # ==========================================
-venv/
 .venv/
+venv/
 env/
 ENV/
 env.bak/
 venv.bak/
 
 # ==========================================
-# Environment Variables & Secrets
+# Environment & Secrets
 # ==========================================
 .env
 .env.*
-!.env.example
-backend/.env
-backend/.env.*
 
 # ==========================================
 # Testing & Coverage
@@ -52,8 +46,6 @@ backend/.env.*
 .mypy_cache/
 .coverage
 .coverage.*
-.noserc
-nosetests.xml
 coverage.xml
 htmlcov/
 .tox/
@@ -61,21 +53,10 @@ htmlcov/
 .hypothesis/
 
 # ==========================================
-# Database files (SQL and local persistence)
-# ==========================================
-*.db
-*.sqlite3
-*.sqlite
-
-# ==========================================
-# IDE & System Files
+# IDE & OS
 # ==========================================
 .vscode/
 .idea/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
 *.sw?
 .DS_Store
 Thumbs.db
@@ -88,52 +69,22 @@ logs/
 *.log
 
 # ==========================================
-# TransitIQ Specific Exclusions (GTFS Data)
+# GTFS Data (large raw datasets)
 # ==========================================
-# Ignore all raw GTFS datasets (large directories of txt files)
 data/*/
-gtfs/
-backend/data/*/
-
-# Keep the data folder itself and the tracking placeholder
 !data/
 !data/.gitkeep
-!backend/data/
-!backend/data/.gitkeep
 
-
-# Temporary scripts
-temp.py
-debug_find_trip.py
-test_foundry.py
-test_fuzzy.py
-verify_ranking.py
-
-# Agent artifacts
+# ==========================================
+# Agent Artifacts
+# ==========================================
 .agents/
 
-# Python
-__pycache__/
-*.pyc
-.venv/
-venv/
-
-# Logs
-*.log
-logs/
-
-# OS
-.DS_Store
-Thumbs.db
-# Debug / investigation files
-backend/after_fix_results.json
-backend/before_fix_results.json
-
-backend/debug_comparison.py
-backend/debug_investigate.py
-backend/debug_station_search.py
-
-backend/test_search.py
-backend/test_search_after.py
-
-backend/verify_fuzzy.py
+# ==========================================
+# Debug / Scratch Scripts
+# ==========================================
+debug_*.py
+temp*.py
+verify_*.py
+test_*.py
+!tests/

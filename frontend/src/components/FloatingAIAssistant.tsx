@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Sparkles, X, Send, Loader2, Train, AlertTriangle, Clock, MapPin, RefreshCw, BarChart2, GitBranch, Footprints, Zap, Brain } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
-import type { JourneyNarrative, NormalizedRoute, JourneyContext } from '../types/transit';
+import type { JourneyNarrative, NormalizedRoute, JourneyContext, TripStop } from '../types/transit';
 import type { RouteRecommendation,  } from '../ai/types';
 import { recommendBestRoute } from '../ai/routeAdvisor';
 import { analyzeTransferRisk } from '../ai/transferRiskAnalyzer';
@@ -51,6 +51,8 @@ interface FloatingAIAssistantProps {
   onSearch: (source: string, destination: string, time?: string) => Promise<any>;
   activeRoute: NormalizedRoute | null;
   onRouteSelect?: (route: NormalizedRoute | null) => void;
+  tripStops?: TripStop[];
+  transferStops?: TripStop[][];
 }
 
 const chipSuggestions = [
@@ -550,7 +552,9 @@ export default function FloatingAIAssistant({
   onClose,
   onSearch, 
   activeRoute, 
-  onRouteSelect
+  onRouteSelect,
+  tripStops,
+  transferStops
 }: FloatingAIAssistantProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -570,6 +574,29 @@ export default function FloatingAIAssistant({
       const alternatives = searchMessage?.allRoutes;
       const rec = searchMessage?.recommendation;
 
+      // Build ordered stop sequence from tripStops/transferStops
+      let stopSequence: { stop_name: string; stop_sequence: number; arrival_time?: string; departure_time?: string }[] = [];
+      if (!activeRoute.isTransfer && tripStops && tripStops.length > 0) {
+        stopSequence = tripStops.map(s => ({
+          stop_name: s.stop_name,
+          stop_sequence: s.stop_sequence,
+          arrival_time: s.arrival_time,
+          departure_time: s.departure_time,
+        }));
+      } else if (activeRoute.isTransfer && transferStops && transferStops.length > 0) {
+        transferStops.forEach(legStops => {
+          legStops.forEach(s => {
+            stopSequence.push({
+              stop_name: s.stop_name,
+              stop_sequence: s.stop_sequence,
+              arrival_time: s.arrival_time,
+              departure_time: s.departure_time,
+            });
+          });
+          stopSequence.push({ stop_name: '---transfer---', stop_sequence: -1 });
+        });
+      }
+
       setSessionContext((prev: any) => ({
         ...prev,
         active_journey: {
@@ -580,6 +607,7 @@ export default function FloatingAIAssistant({
           transfer_count: activeRoute.isTransfer ? 1 : 0
         },
         route: activeRoute,
+        stopSequence,
         transferRisk: analyzeTransferRisk(activeRoute),
         workspaceIntelligence: generateWorkspaceIntelligence(activeRoute),
         tradeoffs: rec?.comparison?.tradeoffs || [],
@@ -590,7 +618,7 @@ export default function FloatingAIAssistant({
       setSessionContext(null);
       setHasInjectedContext(false);
     }
-  }, [activeRoute, messages]);
+  }, [activeRoute, messages, tripStops, transferStops]);
 
   useEffect(() => {
     if (isOpen && activeRoute && !hasInjectedContext) {
@@ -649,15 +677,29 @@ export default function FloatingAIAssistant({
       if (sessionContext?.route && !isExplicitNewSearch) {
          // Treat as Route Context QA
          try {
+           console.log('[DEBUG-FOUNDRY] Sending to /agent/foundry:', {
+             query: text,
+             contextKeys: Object.keys(sessionContext),
+             hasRoute: !!sessionContext.route,
+             hasStopSequence: Array.isArray((sessionContext as any).stopSequence) && (sessionContext as any).stopSequence.length > 0,
+             stopSequenceLength: Array.isArray((sessionContext as any).stopSequence) ? (sessionContext as any).stopSequence.length : 0,
+           });
            const foundryRes = await fetch(`${API_BASE}/agent/foundry`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ query: text, context: sessionContext })
            });
-           if (!foundryRes.ok) throw new Error('Foundry failed');
+           console.log('[DEBUG-FOUNDRY] Response status:', foundryRes.status, foundryRes.statusText);
+           if (!foundryRes.ok) {
+             const errText = await foundryRes.text();
+             console.error('[DEBUG-FOUNDRY] Non-OK response body:', errText);
+             throw new Error('Foundry failed: ' + foundryRes.status);
+           }
            const foundryData = await foundryRes.json();
+           console.log('[DEBUG-FOUNDRY] Response data:', foundryData);
            addMsg({ role: 'assistant', type: 'text', text: foundryData.answer });
          } catch (e) {
+           console.error('[DEBUG-FOUNDRY] Error:', e);
            addMsg({ role: 'assistant', type: 'error', text: "Failed to get route-aware answer." });
          }
          return;

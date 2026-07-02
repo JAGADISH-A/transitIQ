@@ -1,11 +1,11 @@
-"""Microsoft Foundry / Azure AI Foundry tool-calling integration for TransitIQ.
+"""Groq API tool-calling integration for TransitIQ.
 
 This service keeps the existing FastAPI and TransitAgentTools architecture intact,
-while adding a Foundry-compatible tool-calling layer powered by the Azure AI
-Projects SDK. The model can decide which transit tool to invoke, and this class
-executes those tool calls and returns a final natural-language response.
+while adding a Groq-compatible tool-calling layer. The model can decide which
+transit tool to invoke, and this class executes those tool calls and returns a
+final natural-language response.
 
-Recovery: GPT-OSS-120B occasionally fails to emit proper OpenAI tool_calls,
+Recovery: Some models occasionally fail to emit proper OpenAI tool_calls,
 placing the intended tool name and JSON arguments inside reasoning_content
 instead. The _recover_from_reasoning() method detects this condition and
 re-routes the call through the normal execute_tool_call path.
@@ -18,7 +18,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
-from openai import AzureOpenAI
+from groq import Groq
 
 from app.config import get_settings
 from app.services.agent_tools import agent_tools
@@ -104,63 +104,37 @@ _FEED_IN_PROSE_PATTERN = re.compile(
 
 
 class FoundryTransitAgent:
-    """Use Azure AI Foundry tool-calling to answer transit questions.
+    """Use Groq API tool-calling to answer transit questions.
 
     The service intentionally uses the existing TransitAgentTools wrapper as the
-    source of truth for GTFS lookups. Foundry only decides which tool to call and
+    source of truth for GTFS lookups. Groq only decides which tool to call and
     receives structured outputs back from the tool layer.
     """
 
-    def __init__(self, project_endpoint: Optional[str] = None, model_deployment: Optional[str] = None) -> None:
-        """Initialize the Foundry integration.
+    def __init__(self, model: Optional[str] = None) -> None:
+        """Initialize the Groq integration.
 
         Args:
-            project_endpoint: Azure AI Foundry project endpoint. If omitted,
-                the value is read from environment settings.
-            model_deployment: Model deployment name for the Foundry chat model.
-                If omitted, the setting value is used or a safe default is chosen.
+            model: Groq model name. If omitted, the setting value is used
+                or a safe default is chosen.
         """
         self.logger = logging.getLogger(__name__)
         settings = get_settings()
-        
 
-        self.project_endpoint = project_endpoint or getattr(settings, "FOUNDRY_PROJECT_ENDPOINT", None)
-        self.openai_endpoint = getattr(settings, "FOUNDRY_AZURE_OPENAI_ENDPOINT", None)
-        
-        if not self.openai_endpoint:
-            self.openai_endpoint = getattr(settings, "FOUNDRY_PROJECT_OPENAI_ENDPOINT", None)
-        if not self.openai_endpoint:
-            self.openai_endpoint = self.project_endpoint
-        self.model_deployment = model_deployment or getattr(settings, "FOUNDRY_MODEL_DEPLOYMENT", "gpt-4o-mini")
-        self._openai_client = None
+        self.api_key = settings.GROQ_API_KEY
+        self.model = model or settings.GROQ_MODEL
+        self._client = None
 
-        self.logger.info("[FOUNDRY-INIT] Azure OpenAI endpoint: %s", self.openai_endpoint)
-        self.logger.info("[FOUNDRY-INIT] Model deployment: %s", self.model_deployment)
-        self.logger.info("[FOUNDRY-INIT] API key present: %s", bool(settings.FOUNDRY_API_KEY))
+        self.logger.info("[GROQ-INIT] Model: %s", self.model)
+        self.logger.info("[GROQ-INIT] API key present: %s", bool(self.api_key))
 
-        self._api_key = settings.FOUNDRY_API_KEY
-        self._openai_client = None
-        self.logger.info("[FOUNDRY-INIT] Client will be initialized lazily on first use.")
-
-    def _get_client(self):
-        """Lazily initialize the AzureOpenAI client on first use."""
-        if self._openai_client is not None:
-            return self._openai_client
-        if not self.openai_endpoint or not self._api_key:
-            self.logger.warning("[FOUNDRY-CLIENT] No endpoint or API key — client unavailable.")
-            return None
-        try:
-            self._openai_client = AzureOpenAI(
-                api_key=self._api_key,
-                azure_endpoint=self.openai_endpoint,
-                api_version="2024-12-01-preview",
-            )
-            self.logger.info("[FOUNDRY-CLIENT] AzureOpenAI client initialized for %s", self.openai_endpoint)
-            return self._openai_client
-        except Exception as exc:
-            self.logger.error("[FOUNDRY-CLIENT] Failed to initialize AzureOpenAI: %s", exc)
-            self._openai_client = None
-            return None
+        if self.api_key:
+            try:
+                self._client = Groq(api_key=self.api_key)
+                self.logger.info("[GROQ-INIT] Groq client initialized.")
+            except Exception as exc:
+                self.logger.error("[GROQ-INIT] Failed to initialize Groq client: %s", exc)
+                self._client = None
 
     def _fast_path_route(self, user_query: str) -> Optional[Dict[str, Any]]:
         """Intent Router to bypass reasoning for simple transit lookups."""
@@ -399,7 +373,7 @@ class FoundryTransitAgent:
     def execute_tool_call(self, tool_call: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a model-requested function call and return the tool result.
 
-        The returned structure is compatible with the OpenAI/Foundry tool-calling
+        The returned structure is compatible with the OpenAI/Groq tool-calling
         protocol, so the model can continue reasoning over the structured output.
         """
         try:
@@ -424,7 +398,7 @@ class FoundryTransitAgent:
             }
 
     # ------------------------------------------------------------------
-    # Reasoning-content recovery (GPT-OSS-120B workaround)
+    # Reasoning-content recovery (model workaround)
     # ------------------------------------------------------------------
 
     def _recover_from_reasoning(
@@ -629,6 +603,7 @@ class FoundryTransitAgent:
         """
         route = context.get('route', {})
         if not route:
+            self.logger.warning("[BUILD-CTX] route missing from context — keys=%s", list(context.keys()) if isinstance(context, dict) else "N/A")
             return {}
 
         transfer_risk = context.get('transferRisk', {})
@@ -825,6 +800,23 @@ class FoundryTransitAgent:
         if "delayStatus" in route and is_valid(route.get("delayStatus")):
             structured["delayStatus"] = route.get("delayStatus")
 
+        # 10. Stop Sequence (intermediate stations)
+        stop_sequence = context.get('stopSequence') if isinstance(context, dict) else None
+        if stop_sequence and isinstance(stop_sequence, list) and len(stop_sequence) > 0:
+            valid_stops = []
+            transfer_marker = {"stop_name": "--- TRANSFER ---", "stop_sequence": -1}
+            for s in stop_sequence:
+                if isinstance(s, dict):
+                    name = s.get('stop_name', '')
+                    seq = s.get('stop_sequence', 0)
+                    if name == '---transfer---':
+                        valid_stops.append(transfer_marker)
+                    elif name:
+                        valid_stops.append({"stop_name": name, "stop_sequence": seq})
+            if valid_stops:
+                self.logger.info("[BUILD-CTX] stopSequence: %d valid stops", len(valid_stops))
+                structured["stopSequence"] = valid_stops
+
         return structured
 
     # ------------------------------------------------------------------
@@ -851,13 +843,15 @@ class FoundryTransitAgent:
             }
 
         self.logger.info("[ROUTER] Query classified as REASONING_PATH")
+        self.logger.warning("[ANSWER-DEBUG] context provided = %s", context is not None)
+        if context:
+            self.logger.warning("[ANSWER-DEBUG] context keys = %s", list(context.keys()) if isinstance(context, dict) else "N/A")
 
         if not isinstance(user_query, str) or not user_query.strip():
             return {"answer": "I can help with transit questions. Please provide a destination or location query.", "provider": "local"}
 
-        client = self._get_client()
-        if client is None:
-            self.logger.warning("[FOUNDRY] Client unavailable — using local planner fallback for query '%s'", user_query)
+        if self._client is None:
+            self.logger.warning("[GROQ] Client unavailable — using local planner fallback for query '%s'", user_query)
             return {
                 "answer": ai_planner.answer_query(user_query).get("answer", "I could not find a matching destination."),
                 "provider": "local",
@@ -903,10 +897,13 @@ class FoundryTransitAgent:
             try:
                 # Format context clearly for the LLM using our Structured Context Builder
                 structured_ctx = self.build_structured_route_context(context)
+                self.logger.warning("[ANSWER-DEBUG] structured_ctx keys = %s", list(structured_ctx.keys()) if structured_ctx else "EMPTY")
+                self.logger.warning("[ANSWER-DEBUG] has stopSequence in structured_ctx = %s", 'stopSequence' in structured_ctx if structured_ctx else False)
                 
                 if structured_ctx:
                     import json
                     ctx_json = json.dumps(structured_ctx, indent=2)
+                    self.logger.warning("[ANSWER-DEBUG] system_prompt context JSON:\n%s", ctx_json)
                     system_prompt += (
                         f"\n\n--- Current Journey Context (JSON Structured Facts) ---\n"
                         f"{ctx_json}\n\n"
@@ -924,25 +921,28 @@ class FoundryTransitAgent:
 
         tool_calls_used: List[str] = []
         successful_tool_results: List[tuple] = []
-        final_answer = "I could not generate a response from the Foundry model."
+        final_answer = "I could not generate a response from the model."
 
-        self.logger.debug("[FOUNDRY-DIAG] START query=%r", user_query)
+        self.logger.debug("[GROQ-DIAG] START query=%r", user_query)
 
         iteration = 0
         for _ in range(5):
             iteration += 1
-            self.logger.debug("[FOUNDRY-DIAG] Loop iteration %d, messages=%d", iteration, len(messages))
+            self.logger.debug("[GROQ-DIAG] Loop iteration %d, messages=%d", iteration, len(messages))
 
             try:
-                response = client.chat.completions.create(
-                    model=self.model_deployment,
+                self.logger.warning("[GROQ-DIAG] Calling Groq API: model=%s, messages_count=%d, tools_count=%d",
+                    self.model, len(messages), len(self.tool_definitions()))
+                response = self._client.chat.completions.create(
+                    model=self.model,
                     messages=messages,
                     tools=self.tool_definitions(),
                     tool_choice="auto",
                     temperature=0.1,
                 )
+                self.logger.warning("[GROQ-DIAG] Groq API call succeeded")
             except Exception as api_exc:
-                self.logger.error("[FOUNDRY-DIAG] Azure OpenAI API call failed: %s", api_exc)
+                self.logger.error("[GROQ-DIAG] Groq API call failed: %s", api_exc)
                 elapsed_ms = int((time.perf_counter() - start_time) * 1000)
                 return {
                     "answer": ai_planner.answer_query(user_query).get("answer", "I could not find a matching destination."),
@@ -953,26 +953,34 @@ class FoundryTransitAgent:
                 }
 
             if not response.choices:
-                self.logger.warning("[FOUNDRY-DIAG] WARNING: response.choices is empty/None!")
+                self.logger.warning("[GROQ-DIAG] WARNING: response.choices is empty/None!")
+                elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+                return {
+                    "answer": ai_planner.answer_query(user_query).get("answer", "I could not generate a response."),
+                    "provider": "local",
+                    "classification": "ERROR_FALLBACK",
+                    "execution_time_ms": elapsed_ms,
+                    "tools_used": [],
+                }
 
             message = response.choices[0].message
             finish_reason = response.choices[0].finish_reason
             self.logger.debug(
-                "[FOUNDRY-DIAG] iter=%d finish_reason=%s role=%s tool_calls=%s",
+                "[GROQ-DIAG] iter=%d finish_reason=%s role=%s tool_calls=%s",
                 iteration, finish_reason, getattr(message, 'role', 'N/A'),
                 getattr(message, 'tool_calls', None)
             )
 
-            # Check for reasoning_content (GPT-OSS extended field)
+            # Check for reasoning_content
             reasoning_content = getattr(message, "reasoning_content", None) or ""
             if reasoning_content:
-                self.logger.debug("[FOUNDRY-DIAG] reasoning_content present (%d chars)", len(reasoning_content))
+                self.logger.debug("[GROQ-DIAG] reasoning_content present (%d chars)", len(reasoning_content))
 
             assistant_message = message.model_dump(exclude_none=True) if hasattr(message, "model_dump") else {
                 "role": getattr(message, "role", "assistant"),
                 "content": getattr(message, "content", None),
             }
-            self.logger.debug("[FOUNDRY-DIAG] assistant_message appended (role=%s)", assistant_message.get('role', 'N/A'))
+            self.logger.debug("[GROQ-DIAG] assistant_message appended (role=%s)", assistant_message.get('role', 'N/A'))
             messages.append(assistant_message)
 
             self.logger.info(f"COMPLETION FINISH_REASON: {finish_reason}")
@@ -981,7 +989,7 @@ class FoundryTransitAgent:
             self.logger.info(f"COMPLETION REASONING: {reasoning_content}")
 
             tool_calls = getattr(message, "tool_calls", None) or []
-            self.logger.debug("[FOUNDRY-DIAG] tool_calls count=%d", len(tool_calls))
+            self.logger.debug("[GROQ-DIAG] tool_calls count=%d", len(tool_calls))
 
             if not tool_calls:
                 raw_content = getattr(message, "content", None)
@@ -992,7 +1000,7 @@ class FoundryTransitAgent:
                 if not raw_content and reasoning_content:
                     self.logger.debug("[RECOVERY] Model failed to emit tool_call (iter %d), reasoning_content detected (%d chars)", iteration, len(reasoning_content))
                     self.logger.warning(
-                        "[RECOVERY] GPT-OSS reasoning_content fallback triggered for query '%s'",
+                        "[RECOVERY] reasoning_content fallback triggered for query '%s'",
                         user_query,
                     )
 
@@ -1067,26 +1075,26 @@ class FoundryTransitAgent:
                         )
 
                 # Normal exit: model returned text content (or nothing)
-                self.logger.debug("[FOUNDRY-DIAG] No tool calls — extracting final answer, raw_content bool=%s", bool(raw_content))
+                self.logger.debug("[GROQ-DIAG] No tool calls — extracting final answer, raw_content bool=%s", bool(raw_content))
                 
-                # FIX: If raw_content is falsy, but reasoning_content has text (and we didn't recover a tool),
+                # If raw_content is falsy, but reasoning_content has text (and we didn't recover a tool),
                 # use reasoning_content as the final answer instead of falling back to default error.
                 if not raw_content and reasoning_content:
                     final_answer = reasoning_content
                 else:
                     final_answer = raw_content or final_answer
                 
-                if final_answer == "I could not generate a response from the Foundry model.":
-                    self.logger.warning("[FOUNDRY-DIAG] BUG: content was falsy, fell back to default error string. choices=%d", len(response.choices) if response.choices else 0)
+                if final_answer == "I could not generate a response from the model.":
+                    self.logger.warning("[GROQ-DIAG] BUG: content was falsy, fell back to default error string. choices=%d", len(response.choices) if response.choices else 0)
                 break
 
             for tool_call in tool_calls:
                 tool_name = getattr(getattr(tool_call, "function", None), "name", None)
-                self.logger.debug("[FOUNDRY-DIAG] Executing tool: %s", tool_name)
+                self.logger.debug("[GROQ-DIAG] Executing tool: %s", tool_name)
                 if tool_name:
                     tool_calls_used.append(tool_name)
                 tool_result = self.execute_tool_call(tool_call.model_dump() if hasattr(tool_call, "model_dump") else tool_call)
-                self.logger.debug("[FOUNDRY-DIAG] TOOL RESULT (%s) received", tool_name)
+                self.logger.debug("[GROQ-DIAG] TOOL RESULT (%s) received", tool_name)
                 messages.append(tool_result)
 
                 try:
@@ -1096,10 +1104,10 @@ class FoundryTransitAgent:
                 except Exception:
                     pass
         else:
-            self.logger.warning("[FOUNDRY-DIAG] Exhausted max iterations (5)")
+            self.logger.warning("[GROQ-DIAG] Exhausted max iterations (5)")
             self.logger.warning("Reached maximum tool-calling iterations for query '%s'", user_query)
 
-        if final_answer == "I could not generate a response from the Foundry model." and successful_tool_results:
+        if final_answer == "I could not generate a response from the model." and successful_tool_results:
             self.logger.info("[FALLBACK] Building response from tool results")
             self.logger.info("[FALLBACK] Building response from tool results")
             
@@ -1130,17 +1138,17 @@ class FoundryTransitAgent:
                 self.logger.info("[FALLBACK] Generated fallback answer")
                 self.logger.info("[FALLBACK] Generated fallback answer")
 
-        self.logger.debug("[FOUNDRY-DIAG] RETURNING tools_used=%s is_default_err=%s", tool_calls_used, final_answer == 'I could not generate a response from the Foundry model.')
+        self.logger.debug("[GROQ-DIAG] RETURNING tools_used=%s is_default_err=%s", tool_calls_used, final_answer == 'I could not generate a response from the model.')
 
         self.logger.info(f"RETURN ITERATION: {iteration}")
         self.logger.info(f"RETURN FINAL_ANSWER: {final_answer}")
         self.logger.info(f"RETURN TOOLS_USED: {tool_calls_used}")
-        self.logger.info(f"RETURN PROVIDER: foundry")
+        self.logger.info(f"RETURN PROVIDER: groq")
 
         elapsed_ms = int((time.perf_counter() - start_time) * 1000)
         return {
             "answer": final_answer,
-            "provider": "foundry",
+            "provider": "groq",
             "tools_used": tool_calls_used,
             "classification": "REASONING_PATH",
             "execution_time_ms": elapsed_ms,

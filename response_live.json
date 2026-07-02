@@ -1,0 +1,2567 @@
+{
+  "success": true,
+  "narrative": {
+    "headline": "Limited Service Available",
+    "summary": "Routes are available, but they require transfers or extended waiting times.",
+    "recommendation": "You may prefer waiting for a later direct service if your travel time is flexible.",
+    "warnings": [],
+    "alternatives_available": 29
+  },
+  "routes": [],
+  "transfer_routes": [
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "CHENNAI BEACH",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43752",
+        "route_id": "43752",
+        "route_name": "E-DEPO - MSB EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "CHENNAI BEACH",
+        "stops_between": 14,
+        "departure_time": "08:59:00",
+        "arrival_time": "10:05:00",
+        "departure_display": {
+          "display_time": "08:59 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:05 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 66,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "40003",
+        "route_id": "40003",
+        "route_name": "MSB-TBM EMU LOCAL",
+        "source_stop": "CHENNAI BEACH",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 3,
+        "departure_time": "10:15:00",
+        "arrival_time": "10:29:00",
+        "departure_display": {
+          "display_time": "10:15 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:29 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 14,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 828,
+      "transfer_wait": 10,
+      "walk_leg": null,
+      "quality": {
+        "score": 20.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Fastest service available",
+        "route_flags": [
+          "OPTIMAL_TRANSFER",
+          "FASTEST_ROUTE"
+        ]
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 11
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "CHENNAI BEACH",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43752",
+        "route_id": "43752",
+        "route_name": "E-DEPO - MSB EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "CHENNAI BEACH",
+        "stops_between": 14,
+        "departure_time": "08:59:00",
+        "arrival_time": "10:05:00",
+        "departure_display": {
+          "display_time": "08:59 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:05 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 66,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "40059",
+        "route_id": "40059",
+        "route_name": "MSB-TBM FAST EMU LOCAL",
+        "source_stop": "CHENNAI BEACH",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 1,
+        "departure_time": "10:15:00",
+        "arrival_time": "10:29:00",
+        "departure_display": {
+          "display_time": "10:15 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:29 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 14,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 828,
+      "transfer_wait": 10,
+      "walk_leg": null,
+      "quality": {
+        "score": 20.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Fastest service available",
+        "route_flags": [
+          "OPTIMAL_TRANSFER",
+          "FASTEST_ROUTE"
+        ]
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 11
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "VILLIVAKKAM",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43214",
+        "route_id": "43214",
+        "route_name": "TRL-MASS EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "VILLIVAKKAM",
+        "stops_between": 7,
+        "departure_time": "08:30:00",
+        "arrival_time": "08:48:00",
+        "departure_display": {
+          "display_time": "08:30 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:48 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 18,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "66034",
+        "route_id": "66034",
+        "route_name": "TNM-TBM MEMU",
+        "source_stop": "VILLIVAKKAM",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 7,
+        "departure_time": "09:10:00",
+        "arrival_time": "10:13:00",
+        "departure_display": {
+          "display_time": "09:10 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:13 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 63,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 857,
+      "transfer_wait": 22,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": []
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 27
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "VEPPAMPATTU",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43209",
+        "route_id": "43209",
+        "route_name": "MASS-TRL EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "VEPPAMPATTU",
+        "stops_between": 4,
+        "departure_time": "08:29:00",
+        "arrival_time": "08:41:00",
+        "departure_display": {
+          "display_time": "08:29 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:41 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 12,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "66034",
+        "route_id": "66034",
+        "route_name": "TNM-TBM MEMU",
+        "source_stop": "VEPPAMPATTU",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 9,
+        "departure_time": "08:44:00",
+        "arrival_time": "10:13:00",
+        "departure_display": {
+          "display_time": "08:44 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:13 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 89,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 858,
+      "transfer_wait": 3,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": []
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 27
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "VILLIVAKKAM",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "66022",
+        "route_id": "66022",
+        "route_name": "TRT-MASS MEMU",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "VILLIVAKKAM",
+        "stops_between": 7,
+        "departure_time": "08:20:00",
+        "arrival_time": "08:44:00",
+        "departure_display": {
+          "display_time": "08:20 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:44 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 24,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "66034",
+        "route_id": "66034",
+        "route_name": "TNM-TBM MEMU",
+        "source_stop": "VILLIVAKKAM",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 7,
+        "departure_time": "09:10:00",
+        "arrival_time": "10:13:00",
+        "departure_display": {
+          "display_time": "09:10 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:13 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 63,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 867,
+      "transfer_wait": 26,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": []
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 27
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "SEVVAPET ROAD",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43505",
+        "route_id": "43505",
+        "route_name": "MASS-TRT EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "SEVVAPET ROAD",
+        "stops_between": 5,
+        "departure_time": "08:14:00",
+        "arrival_time": "08:25:00",
+        "departure_display": {
+          "display_time": "08:14 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:25 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 11,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "66034",
+        "route_id": "66034",
+        "route_name": "TNM-TBM MEMU",
+        "source_stop": "SEVVAPET ROAD",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 10,
+        "departure_time": "08:41:00",
+        "arrival_time": "10:13:00",
+        "departure_display": {
+          "display_time": "08:41 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:13 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 92,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 873,
+      "transfer_wait": 16,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": []
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 27
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "VILLIVAKKAM",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43882",
+        "route_id": "43882",
+        "route_name": "TI-MASS EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "VILLIVAKKAM",
+        "stops_between": 7,
+        "departure_time": "08:07:00",
+        "arrival_time": "08:29:00",
+        "departure_display": {
+          "display_time": "08:07 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:29 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 22,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "66034",
+        "route_id": "66034",
+        "route_name": "TNM-TBM MEMU",
+        "source_stop": "VILLIVAKKAM",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 7,
+        "departure_time": "09:10:00",
+        "arrival_time": "10:13:00",
+        "departure_display": {
+          "display_time": "09:10 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:13 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 63,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 880,
+      "transfer_wait": 41,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": []
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 27
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "VILLIVAKKAM",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43506",
+        "route_id": "43506",
+        "route_name": "TRT-MASS EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "VILLIVAKKAM",
+        "stops_between": 7,
+        "departure_time": "08:01:00",
+        "arrival_time": "08:25:00",
+        "departure_display": {
+          "display_time": "08:01 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:25 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 24,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "66034",
+        "route_id": "66034",
+        "route_name": "TNM-TBM MEMU",
+        "source_stop": "VILLIVAKKAM",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 7,
+        "departure_time": "09:10:00",
+        "arrival_time": "10:13:00",
+        "departure_display": {
+          "display_time": "09:10 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:13 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 63,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 886,
+      "transfer_wait": 45,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": []
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 27
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "VILLIVAKKAM",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43212",
+        "route_id": "43212",
+        "route_name": "TRL-MASS EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "VILLIVAKKAM",
+        "stops_between": 7,
+        "departure_time": "07:58:00",
+        "arrival_time": "08:21:00",
+        "departure_display": {
+          "display_time": "07:58 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:21 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 23,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "66034",
+        "route_id": "66034",
+        "route_name": "TNM-TBM MEMU",
+        "source_stop": "VILLIVAKKAM",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 7,
+        "departure_time": "09:10:00",
+        "arrival_time": "10:13:00",
+        "departure_display": {
+          "display_time": "09:10 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:13 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 63,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 889,
+      "transfer_wait": 49,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": []
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 27
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "VILLIVAKKAM",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43108",
+        "route_id": "43108",
+        "route_name": "E-DEPO - MASS EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "VILLIVAKKAM",
+        "stops_between": 7,
+        "departure_time": "07:54:00",
+        "arrival_time": "08:18:00",
+        "departure_display": {
+          "display_time": "07:54 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:18 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 24,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "66034",
+        "route_id": "66034",
+        "route_name": "TNM-TBM MEMU",
+        "source_stop": "VILLIVAKKAM",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 7,
+        "departure_time": "09:10:00",
+        "arrival_time": "10:13:00",
+        "departure_display": {
+          "display_time": "09:10 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:13 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 63,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 893,
+      "transfer_wait": 52,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": []
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 27
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "KADAMBATTUR",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "66015",
+        "route_id": "66015",
+        "route_name": "MASS-AJJ MEMU",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "KADAMBATTUR",
+        "stops_between": 9,
+        "departure_time": "07:47:00",
+        "arrival_time": "08:19:00",
+        "departure_display": {
+          "display_time": "07:47 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:19 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 32,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "66034",
+        "route_id": "66034",
+        "route_name": "TNM-TBM MEMU",
+        "source_stop": "KADAMBATTUR",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 13,
+        "departure_time": "08:26:00",
+        "arrival_time": "10:13:00",
+        "departure_display": {
+          "display_time": "08:26 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:13 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 107,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 900,
+      "transfer_wait": 7,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": []
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 27
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "CHENNAI BEACH",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43804",
+        "route_id": "43804",
+        "route_name": "AJJ-MSB LS GL EMU",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "CHENNAI BEACH",
+        "stops_between": 14,
+        "departure_time": "07:46:00",
+        "arrival_time": "08:50:00",
+        "departure_display": {
+          "display_time": "07:46 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:50 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 64,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "40001",
+        "route_id": "40001",
+        "route_name": "MSB-TBM EMU LOCAL",
+        "source_stop": "CHENNAI BEACH",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 3,
+        "departure_time": "08:55:00",
+        "arrival_time": "09:09:00",
+        "departure_display": {
+          "display_time": "08:55 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "09:09 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 14,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 901,
+      "transfer_wait": 5,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": [
+          "VERY_LONG_TRANSFER_WAIT"
+        ]
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 91
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "CHENNAI BEACH",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43804",
+        "route_id": "43804",
+        "route_name": "AJJ-MSB LS GL EMU",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "CHENNAI BEACH",
+        "stops_between": 14,
+        "departure_time": "07:46:00",
+        "arrival_time": "08:50:00",
+        "departure_display": {
+          "display_time": "07:46 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:50 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 64,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "40003",
+        "route_id": "40003",
+        "route_name": "MSB-TBM EMU LOCAL",
+        "source_stop": "CHENNAI BEACH",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 3,
+        "departure_time": "10:15:00",
+        "arrival_time": "10:29:00",
+        "departure_display": {
+          "display_time": "10:15 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:29 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 14,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 901,
+      "transfer_wait": 85,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": [
+          "LONG_TRANSFER_WAIT"
+        ]
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 11
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "CHENNAI BEACH",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43804",
+        "route_id": "43804",
+        "route_name": "AJJ-MSB LS GL EMU",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "CHENNAI BEACH",
+        "stops_between": 14,
+        "departure_time": "07:46:00",
+        "arrival_time": "08:50:00",
+        "departure_display": {
+          "display_time": "07:46 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:50 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 64,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "40055",
+        "route_id": "40055",
+        "route_name": "MSB-TBM FAST EMU LOCAL",
+        "source_stop": "CHENNAI BEACH",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 1,
+        "departure_time": "09:20:00",
+        "arrival_time": "09:34:00",
+        "departure_display": {
+          "display_time": "09:20 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "09:34 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 14,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 901,
+      "transfer_wait": 30,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": [
+          "LONG_TRANSFER_WAIT"
+        ]
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 66
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "CHENNAI BEACH",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43804",
+        "route_id": "43804",
+        "route_name": "AJJ-MSB LS GL EMU",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "CHENNAI BEACH",
+        "stops_between": 14,
+        "departure_time": "07:46:00",
+        "arrival_time": "08:50:00",
+        "departure_display": {
+          "display_time": "07:46 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:50 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 64,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "40057",
+        "route_id": "40057",
+        "route_name": "MSB-TBM FAST EMU LOCAL",
+        "source_stop": "CHENNAI BEACH",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 1,
+        "departure_time": "09:50:00",
+        "arrival_time": "10:04:00",
+        "departure_display": {
+          "display_time": "09:50 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:04 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 14,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 901,
+      "transfer_wait": 60,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": []
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 36
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "CHENNAI BEACH",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43804",
+        "route_id": "43804",
+        "route_name": "AJJ-MSB LS GL EMU",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "CHENNAI BEACH",
+        "stops_between": 14,
+        "departure_time": "07:46:00",
+        "arrival_time": "08:50:00",
+        "departure_display": {
+          "display_time": "07:46 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:50 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 64,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "40059",
+        "route_id": "40059",
+        "route_name": "MSB-TBM FAST EMU LOCAL",
+        "source_stop": "CHENNAI BEACH",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 1,
+        "departure_time": "10:15:00",
+        "arrival_time": "10:29:00",
+        "departure_display": {
+          "display_time": "10:15 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:29 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 14,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 901,
+      "transfer_wait": 85,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": [
+          "LONG_TRANSFER_WAIT"
+        ]
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 11
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "CHENNAI BEACH",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43804",
+        "route_id": "43804",
+        "route_name": "AJJ-MSB LS GL EMU",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "CHENNAI BEACH",
+        "stops_between": 14,
+        "departure_time": "07:46:00",
+        "arrival_time": "08:50:00",
+        "departure_display": {
+          "display_time": "07:46 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:50 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 64,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "40525",
+        "route_id": "40525",
+        "route_name": "MSB-CGL EMU LOCAL",
+        "source_stop": "CHENNAI BEACH",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 3,
+        "departure_time": "09:20:00",
+        "arrival_time": "09:34:00",
+        "departure_display": {
+          "display_time": "09:20 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "09:34 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 14,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 901,
+      "transfer_wait": 30,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": [
+          "LONG_TRANSFER_WAIT"
+        ]
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 66
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "CHENNAI BEACH",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43804",
+        "route_id": "43804",
+        "route_name": "AJJ-MSB LS GL EMU",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "CHENNAI BEACH",
+        "stops_between": 14,
+        "departure_time": "07:46:00",
+        "arrival_time": "08:50:00",
+        "departure_display": {
+          "display_time": "07:46 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:50 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 64,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "40527",
+        "route_id": "40527",
+        "route_name": "MSB-CGL EMU LOCAL",
+        "source_stop": "CHENNAI BEACH",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 3,
+        "departure_time": "09:45:00",
+        "arrival_time": "09:59:00",
+        "departure_display": {
+          "display_time": "09:45 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "09:59 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 14,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 901,
+      "transfer_wait": 55,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": []
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 41
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "VILLIVAKKAM",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43804",
+        "route_id": "43804",
+        "route_name": "AJJ-MSB LS GL EMU",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "VILLIVAKKAM",
+        "stops_between": 7,
+        "departure_time": "07:46:00",
+        "arrival_time": "08:10:00",
+        "departure_display": {
+          "display_time": "07:46 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:10 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 24,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "66034",
+        "route_id": "66034",
+        "route_name": "TNM-TBM MEMU",
+        "source_stop": "VILLIVAKKAM",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 7,
+        "departure_time": "09:10:00",
+        "arrival_time": "10:13:00",
+        "departure_display": {
+          "display_time": "09:10 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:13 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 63,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 901,
+      "transfer_wait": 60,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": []
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 27
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "TIRUVALLUR",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43861",
+        "route_id": "43861",
+        "route_name": "ENR-TRL EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "TIRUVALLUR",
+        "stops_between": 7,
+        "departure_time": "07:37:00",
+        "arrival_time": "08:10:00",
+        "departure_display": {
+          "display_time": "07:37 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:10 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 33,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "66034",
+        "route_id": "66034",
+        "route_name": "TNM-TBM MEMU",
+        "source_stop": "TIRUVALLUR",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 11,
+        "departure_time": "08:35:00",
+        "arrival_time": "10:13:00",
+        "departure_display": {
+          "display_time": "08:35 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:13 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 98,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 910,
+      "transfer_wait": 25,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": []
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 27
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "TIRUVALLUR",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43207",
+        "route_id": "43207",
+        "route_name": "MASS-TRL EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "TIRUVALLUR",
+        "stops_between": 7,
+        "departure_time": "07:34:00",
+        "arrival_time": "08:05:00",
+        "departure_display": {
+          "display_time": "07:34 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:05 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 31,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "66034",
+        "route_id": "66034",
+        "route_name": "TNM-TBM MEMU",
+        "source_stop": "TIRUVALLUR",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 11,
+        "departure_time": "08:35:00",
+        "arrival_time": "10:13:00",
+        "departure_display": {
+          "display_time": "08:35 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:13 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 98,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 913,
+      "transfer_wait": 30,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": []
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 27
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "CHENNAI BEACH",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43802",
+        "route_id": "43802",
+        "route_name": "AJJ-MSB EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "CHENNAI BEACH",
+        "stops_between": 14,
+        "departure_time": "07:33:00",
+        "arrival_time": "08:35:00",
+        "departure_display": {
+          "display_time": "07:33 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:35 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 62,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "40001",
+        "route_id": "40001",
+        "route_name": "MSB-TBM EMU LOCAL",
+        "source_stop": "CHENNAI BEACH",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 3,
+        "departure_time": "08:55:00",
+        "arrival_time": "09:09:00",
+        "departure_display": {
+          "display_time": "08:55 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "09:09 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 14,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 914,
+      "transfer_wait": 20,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": [
+          "VERY_LONG_TRANSFER_WAIT"
+        ]
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 91
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "CHENNAI BEACH",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43802",
+        "route_id": "43802",
+        "route_name": "AJJ-MSB EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "CHENNAI BEACH",
+        "stops_between": 14,
+        "departure_time": "07:33:00",
+        "arrival_time": "08:35:00",
+        "departure_display": {
+          "display_time": "07:33 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:35 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 62,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "40003",
+        "route_id": "40003",
+        "route_name": "MSB-TBM EMU LOCAL",
+        "source_stop": "CHENNAI BEACH",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 3,
+        "departure_time": "10:15:00",
+        "arrival_time": "10:29:00",
+        "departure_display": {
+          "display_time": "10:15 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:29 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 14,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 914,
+      "transfer_wait": 100,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": [
+          "VERY_LONG_TRANSFER_WAIT"
+        ]
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 11
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "CHENNAI BEACH",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43802",
+        "route_id": "43802",
+        "route_name": "AJJ-MSB EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "CHENNAI BEACH",
+        "stops_between": 14,
+        "departure_time": "07:33:00",
+        "arrival_time": "08:35:00",
+        "departure_display": {
+          "display_time": "07:33 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:35 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 62,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "40055",
+        "route_id": "40055",
+        "route_name": "MSB-TBM FAST EMU LOCAL",
+        "source_stop": "CHENNAI BEACH",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 1,
+        "departure_time": "09:20:00",
+        "arrival_time": "09:34:00",
+        "departure_display": {
+          "display_time": "09:20 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "09:34 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 14,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 914,
+      "transfer_wait": 45,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": [
+          "LONG_TRANSFER_WAIT"
+        ]
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 66
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "CHENNAI BEACH",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43802",
+        "route_id": "43802",
+        "route_name": "AJJ-MSB EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "CHENNAI BEACH",
+        "stops_between": 14,
+        "departure_time": "07:33:00",
+        "arrival_time": "08:35:00",
+        "departure_display": {
+          "display_time": "07:33 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:35 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 62,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "40057",
+        "route_id": "40057",
+        "route_name": "MSB-TBM FAST EMU LOCAL",
+        "source_stop": "CHENNAI BEACH",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 1,
+        "departure_time": "09:50:00",
+        "arrival_time": "10:04:00",
+        "departure_display": {
+          "display_time": "09:50 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:04 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 14,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 914,
+      "transfer_wait": 75,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": [
+          "LONG_TRANSFER_WAIT"
+        ]
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 36
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "CHENNAI BEACH",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43802",
+        "route_id": "43802",
+        "route_name": "AJJ-MSB EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "CHENNAI BEACH",
+        "stops_between": 14,
+        "departure_time": "07:33:00",
+        "arrival_time": "08:35:00",
+        "departure_display": {
+          "display_time": "07:33 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:35 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 62,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "40059",
+        "route_id": "40059",
+        "route_name": "MSB-TBM FAST EMU LOCAL",
+        "source_stop": "CHENNAI BEACH",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 1,
+        "departure_time": "10:15:00",
+        "arrival_time": "10:29:00",
+        "departure_display": {
+          "display_time": "10:15 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:29 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 14,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 914,
+      "transfer_wait": 100,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": [
+          "VERY_LONG_TRANSFER_WAIT"
+        ]
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 11
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "CHENNAI BEACH",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43802",
+        "route_id": "43802",
+        "route_name": "AJJ-MSB EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "CHENNAI BEACH",
+        "stops_between": 14,
+        "departure_time": "07:33:00",
+        "arrival_time": "08:35:00",
+        "departure_display": {
+          "display_time": "07:33 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:35 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 62,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "40525",
+        "route_id": "40525",
+        "route_name": "MSB-CGL EMU LOCAL",
+        "source_stop": "CHENNAI BEACH",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 3,
+        "departure_time": "09:20:00",
+        "arrival_time": "09:34:00",
+        "departure_display": {
+          "display_time": "09:20 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "09:34 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 14,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 914,
+      "transfer_wait": 45,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": [
+          "LONG_TRANSFER_WAIT"
+        ]
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 66
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "CHENNAI BEACH",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43802",
+        "route_id": "43802",
+        "route_name": "AJJ-MSB EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "CHENNAI BEACH",
+        "stops_between": 14,
+        "departure_time": "07:33:00",
+        "arrival_time": "08:35:00",
+        "departure_display": {
+          "display_time": "07:33 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "08:35 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 62,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "40527",
+        "route_id": "40527",
+        "route_name": "MSB-CGL EMU LOCAL",
+        "source_stop": "CHENNAI BEACH",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 3,
+        "departure_time": "09:45:00",
+        "arrival_time": "09:59:00",
+        "departure_display": {
+          "display_time": "09:45 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "09:59 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 14,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 914,
+      "transfer_wait": 70,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": [
+          "LONG_TRANSFER_WAIT"
+        ]
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 41
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "VILLIVAKKAM",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43802",
+        "route_id": "43802",
+        "route_name": "AJJ-MSB EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "VILLIVAKKAM",
+        "stops_between": 7,
+        "departure_time": "07:33:00",
+        "arrival_time": "07:58:00",
+        "departure_display": {
+          "display_time": "07:33 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "07:58 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 25,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "66034",
+        "route_id": "66034",
+        "route_name": "TNM-TBM MEMU",
+        "source_stop": "VILLIVAKKAM",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 7,
+        "departure_time": "09:10:00",
+        "arrival_time": "10:13:00",
+        "departure_display": {
+          "display_time": "09:10 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:13 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 63,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 914,
+      "transfer_wait": 72,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": [
+          "LONG_TRANSFER_WAIT"
+        ]
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 27
+    },
+    {
+      "journey_type": "TRANSFER",
+      "transfer_stop": "VILLIVAKKAM",
+      "first_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "43210",
+        "route_id": "43210",
+        "route_name": "TRL-MASS EMU LOCAL",
+        "source_stop": "HINDU COLLEGE",
+        "destination_stop": "VILLIVAKKAM",
+        "stops_between": 7,
+        "departure_time": "07:21:00",
+        "arrival_time": "07:41:00",
+        "departure_display": {
+          "display_time": "07:21 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "07:41 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 20,
+        "shape_id": null,
+        "quality": null
+      },
+      "second_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "66034",
+        "route_id": "66034",
+        "route_name": "TNM-TBM MEMU",
+        "source_stop": "VILLIVAKKAM",
+        "destination_stop": "CHENNAI EGMORE",
+        "stops_between": 7,
+        "departure_time": "09:10:00",
+        "arrival_time": "10:13:00",
+        "departure_display": {
+          "display_time": "09:10 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:13 AM",
+          "day_offset": 0
+        },
+        "duration_minutes": 63,
+        "shape_id": null,
+        "quality": null
+      },
+      "total_duration": 926,
+      "transfer_wait": 89,
+      "walk_leg": null,
+      "quality": {
+        "score": 0.0,
+        "classification": "Low Quality",
+        "recommendation_reason": "Standard Route",
+        "route_flags": [
+          "LONG_TRANSFER_WAIT"
+        ]
+      },
+      "third_leg": {
+        "journey_type": "DIRECT",
+        "feed": "railways",
+        "trip_id": "16127",
+        "route_id": "16127",
+        "route_name": "MS GURUVAYUR EXP",
+        "source_stop": "CHENNAI EGMORE",
+        "destination_stop": "NAGER COIL TOWN",
+        "stops_between": 26,
+        "departure_time": "10:40:00",
+        "arrival_time": "22:47:00",
+        "departure_display": {
+          "display_time": "10:40 AM",
+          "day_offset": 0
+        },
+        "arrival_display": {
+          "display_time": "10:47 PM",
+          "day_offset": 0
+        },
+        "duration_minutes": 727,
+        "shape_id": null,
+        "quality": null
+      },
+      "transfer_stop_2": "CHENNAI EGMORE",
+      "transfer_wait_2": 27
+    }
+  ]
+}
