@@ -55,7 +55,7 @@ class IntentClassifier:
 
     _SMALL_TALK_PATTERNS = [
         re.compile(r"\bhow are you\b", re.IGNORECASE),
-        re.compile(r"\bwhat('s| is) up\b", re.IGNORECASE),
+        re.compile(r"\bwhat('s| is|s) up\b", re.IGNORECASE),
         re.compile(r"\bhow('s| is) it going\b", re.IGNORECASE),
         re.compile(r"\b(nice|great|awesome)\s+(to meet you|weather)\b", re.IGNORECASE),
     ]
@@ -63,6 +63,7 @@ class IntentClassifier:
     _NEW_JOURNEY_PATTERNS = [
         re.compile(r"(?:from|between)\s+.+\s+to\s+", re.IGNORECASE),
         re.compile(r"how\s+(?:do|can|to)\s+(?:i\s+)?(?:get|go|travel|reach)\s+", re.IGNORECASE),
+        re.compile(r"how\s+go\s+\w+", re.IGNORECASE),
         re.compile(r"(?:plan|find|search|show)\s+(?:a\s+)?(?:route|trip|journey|way)\s+", re.IGNORECASE),
         re.compile(r"(?:i\s+(?:want|would\s+like|need)\s+(?:to\s+)?(?:go|travel|reach))\s+", re.IGNORECASE),
         re.compile(r"^(?:route|trip|journey|travel|directions?)\s+(?:from|between|to)\b", re.IGNORECASE),
@@ -75,9 +76,12 @@ class IntentClassifier:
         re.compile(r"\b(?:station|stop)\s+information\b", re.IGNORECASE),
         re.compile(r"\bwhat\s+stations?\b", re.IGNORECASE),
         re.compile(r"\bnearby\s", re.IGNORECASE),
+        re.compile(r"\binfo\s+about\s+(?:station|stop)\b", re.IGNORECASE),
         # Phase 4 — Station classification patterns
         re.compile(r"\bis\s+\w+\s+(?:a\s+)?(?:junction|terminal|halt)\b", re.IGNORECASE),
+        re.compile(r"\bis\s+.+?(?:a\s+)?(?:junction|terminal|halt)\b", re.IGNORECASE),
         re.compile(r"\btell\s+me\s+about\s+\w+\s+(?:station|stop)\b", re.IGNORECASE),
+        re.compile(r"\btell\s+me\s+about\s+.+?(?:station|stop)\b", re.IGNORECASE),
         re.compile(r"\bmajor\s+stations?\s+(?:on|along|in)\b", re.IGNORECASE),
         re.compile(r"\bwhere\s+should\s+i\s+board\b", re.IGNORECASE),
     ]
@@ -85,8 +89,10 @@ class IntentClassifier:
     _TRAIN_PATTERNS = [
         re.compile(r"\binformation\s+(?:about|regarding|on)\s+(?:train|express)\b", re.IGNORECASE),
         re.compile(r"\btrain\s+(?:info|number|details)\b", re.IGNORECASE),
-        re.compile(r"\b(?:coach|berth|seat)\s+(?:position|layout|composition)\b", re.IGNORECASE),
+        re.compile(r"\b(?:coach|berth|seat)\s+(?:position|layout|composition|information)\b", re.IGNORECASE),
         re.compile(r"\babout\s+(?:train|express|passenger)\s+\d+\b", re.IGNORECASE),
+        re.compile(r"\btell\s+me\s+about\s+(?:\w+\s+)?train\b", re.IGNORECASE),
+        re.compile(r"\b(?:explain|describe)\s+this\s+train\b", re.IGNORECASE),
         # Phase 4 — Train classification patterns
         re.compile(r"\b(?:what\s+type|is\s+this)\s+(?:of\s+)?train\b", re.IGNORECASE),
         re.compile(r"\bis\s+this\s+(?:a\s+)?(?:superfast|express)\b", re.IGNORECASE),
@@ -103,7 +109,8 @@ class IntentClassifier:
     ]
 
     _KNOWLEDGE_PATTERNS = [
-        re.compile(r"\bwhat\s+is\s+(?:a|an|the)\s+(?!station|stop|train|route)\b", re.IGNORECASE),
+        re.compile(r"\bwhat\s+is\s+(?:a|an|the)\s+(?!station|stop|train|route|schedule|fastest|best|shortest|quickest|earliest|cheapest)\b", re.IGNORECASE),
+        re.compile(r"\bwhat\s+is\s+(?:waitlist|chair\s+car)\b", re.IGNORECASE),
         re.compile(r"\bwhat\s+(?:does|is)\s+RAC\b", re.IGNORECASE),
         re.compile(r"\bwhat\s+(?:does|is)\s+(?:CNF|WL|GNWL|PQWL|RLWL|TQWL|RSWL|TATKAL|QUEUE)\b", re.IGNORECASE),
         re.compile(r"\b(?:explain|tell\s+me\s+about)\s+(?:RAC|tatkal|quota|waitlist)\b", re.IGNORECASE),
@@ -138,20 +145,21 @@ class IntentClassifier:
     _COMPARISON_PATTERNS = [
         re.compile(r"\b(which|compare|comparison)\s+(is|has|would|will|arrives|departs|reaches)\b", re.IGNORECASE),
         re.compile(r"\bcompare\b", re.IGNORECASE),
-        re.compile(r"\bwhich\s+(is|one)\s+(faster|better|shorter|quicker|earlier)\b", re.IGNORECASE),
+        re.compile(r"\bwhich\s+(is|one(\s+is)?)\s+(faster|better|shorter|quicker|earlier)\b", re.IGNORECASE),
         re.compile(r"\b(faster|quicker|earlier|shorter)\s+than\b", re.IGNORECASE),
         re.compile(r"\bfewer\s+stops?\b", re.IGNORECASE),
         re.compile(r"\bbetter\s+(option|route|choice)\b", re.IGNORECASE),
     ]
 
     _RECOMMENDATION_PATTERNS = [
-        re.compile(r"\b(recommend|suggest|best|top)\s+(a|the|me|one)?\s*(route|option|train|journey|way)\b", re.IGNORECASE),
+        re.compile(r"\b(recommend|suggest|best|top)\s+(a|the|me|one)?\s*(\w+\s+)?(route|option|train|journey|way)\b", re.IGNORECASE),
         re.compile(r"\bwhat(\'s| is)\s+(the\s+)?(best|fastest|shortest|quickest|earliest|cheapest)\b", re.IGNORECASE),
         re.compile(r"\brecommend\s+one\b", re.IGNORECASE),
+        re.compile(r"\bwhich\s+.+?\s+(recommend|suggest)\b", re.IGNORECASE),
     ]
 
     _BOOKING_PATTERNS = [
-        re.compile(r"\bbook\s+(a\s+)?ticket\b", re.IGNORECASE),
+        re.compile(r"\bbook\s+(a\s+)?(ticket|berth)\b", re.IGNORECASE),
         re.compile(r"\b(reserve|purchase)\s+(a\s+)?(ticket|seat|berth)\b", re.IGNORECASE),
         re.compile(r"^\s*book\s*$", re.IGNORECASE),
     ]
@@ -165,12 +173,15 @@ class IntentClassifier:
         re.compile(r"\bwhat['']s\s+(the\s+)?(fastest|best|quickest)\s+combination\b", re.IGNORECASE),
         re.compile(r"\b(first.?mile|last.?mile)\b", re.IGNORECASE),
         re.compile(r"\b(combine|multi.?modal|mixed)\s+(transport|mode|journey|travel)\b", re.IGNORECASE),
+        re.compile(r"\b(combine|mix)\s+\w+\s+(?:and|with)\s+\w+\b", re.IGNORECASE),
         re.compile(r"\b(first|then|after)\s+(take|use|get|switch|board)\s+(the\s+)?(metro|bus|ferry)\b", re.IGNORECASE),
+        re.compile(r"\bfirst\s+(train|bus|metro|ferry)\s+then\s+(train|bus|metro|ferry)\b", re.IGNORECASE),
     ]
 
     _MODAL_FILTER_PATTERNS = [
-        re.compile(r"\bavoid\s+(buses?|metro|ferry|changing)\b", re.IGNORECASE),
+        re.compile(r"\bavoid\s+(bus(?:es)?|metro|ferry|changing)\b", re.IGNORECASE),
         re.compile(r"\b(use|take|prefer)\s+only\s+(trains?|rail|bus|metro|ferry)\b", re.IGNORECASE),
+        re.compile(r"\bonly\s+(trains?|rail|bus|metro|ferry)\b", re.IGNORECASE),
         re.compile(r"\b(use\s+)?no\s+(buses?|metro|ferry|transfers)\b", re.IGNORECASE),
         re.compile(r"\b(avoid|no|don'?t)\s+(want\s+)?(transfers|changing)\b", re.IGNORECASE),
     ]

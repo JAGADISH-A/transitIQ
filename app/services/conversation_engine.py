@@ -49,6 +49,13 @@ from app.services.prompt_builder import prompt_builder
 from app.services.railway_intelligence import railway_intelligence
 from app.services.reference_resolver import reference_resolver
 from app.services.session_manager import session_manager
+from app.services.response_engine import (
+    ResponseStrategy,
+    ResponseDecision,
+    ResponseType,
+    ResponseFormatter,
+    decide_strategy,
+)
 
 SUMARRY_THRESHOLD = 8
 
@@ -69,6 +76,19 @@ class ConversationIntelligenceEngine:
                 self._client = Groq(api_key=self.settings.GROQ_API_KEY)
             except Exception as exc:
                 logger.warning("Groq client unavailable: %s", exc)
+        self._response_engine: ResponseFormatter | None = None
+
+        # Metrics counters
+        self.metrics = {
+            "total_requests": 0,
+            "direct_responses": 0,
+            "hybrid_responses": 0,
+            "llm_responses": 0,
+            "groq_failures": 0,
+            "fallback_responses": 0,
+            "estimated_tokens_saved": 0,
+            "total_latency_ms": 0,
+        }
 
     # ------------------------------------------------------------------
     # Main entry point
@@ -169,6 +189,24 @@ class ConversationIntelligenceEngine:
             cap_result=cap_result,
         )
 
+        # --- Metrics tracking ---
+        self.metrics["total_requests"] += 1
+        strategy_tag = None
+        if provider == "engine":
+            strategy_tag = "direct"
+            self.metrics["direct_responses"] += 1
+        elif provider == "groq":
+            strategy_tag = "llm"
+            self.metrics["llm_responses"] += 1
+        elif provider in ("capability", "clarification"):
+            strategy_tag = "direct"
+            self.metrics["direct_responses"] += 1
+        elif provider == "foundry":
+            strategy_tag = "llm"
+            self.metrics["llm_responses"] += 1
+        if strategy_tag == "direct":
+            self.metrics["estimated_tokens_saved"] += 500
+
         # ------------------------------------------------------------------
         # Step 10 — Update Session Memory
         # ------------------------------------------------------------------
@@ -192,6 +230,8 @@ class ConversationIntelligenceEngine:
         # ------------------------------------------------------------------
         elapsed_ms = int((time.perf_counter() - start_time) * 1000)
         railway_intel_fields = ",".join(railway_intel_data.keys()) if railway_intel_data else ""
+        strategy_label = strategy_tag or "unknown"
+        self.metrics["total_latency_ms"] += elapsed_ms
         self._log_engine(
             intent=intent,
             capability=capability.name,
@@ -204,6 +244,14 @@ class ConversationIntelligenceEngine:
             ref_type=resolved_ref.type.value if resolved_ref else "NONE",
             clarification_needed=clarification.needed if clarification else False,
             railway_intel=railway_intel_fields,
+        )
+        logger.info(
+            "[METRICS] strategy=%s provider=%s elapsed=%dms total_requests=%d tokens_saved=%d",
+            strategy_label,
+            provider,
+            elapsed_ms,
+            self.metrics["total_requests"],
+            self.metrics["estimated_tokens_saved"],
         )
 
         return {
@@ -225,28 +273,81 @@ class ConversationIntelligenceEngine:
         ctx: Any,
         cap_result: CapabilityResult,
     ) -> tuple[str, str, list[str], Any]:
-        """Generate the final response based on capability outcome.
+        """Generate the final response based on strategy-based routing.
 
-        Paths:
-          A — Direct answer from capability (greeting, help, etc.)
-          B — Clarification needed (Phase 3)
-          C — Needs GTFS tools → fallback to foundry_agent
-          D — Standard LLM generation with context
+        Backend decides. Backend formats. AI enhances.
+
+        Strategies:
+          DIRECT   → ResponseFormatter produces the response. No LLM.
+          HYBRID   → Try Groq for polish. Fallback to DIRECT on failure.
+          LLM_ONLY → Existing Groq path (or foundry_agent for tools).
         """
 
-        # Path A: Direct answer from capability (no LLM needed)
-        if not cap_result.needs_llm and cap_result.answer:
-            return cap_result.answer, "capability", cap_result.tools_used, cap_result.route_data
+        # --- Strategy Selection ---
+        has_direct_answer = (not cap_result.needs_llm and bool(cap_result.answer))
+        has_journey = bool(ctx.current_journey)
+        needs_tools = bool(cap_result.context_data.get("needs_tools"))
+        has_railway_intel = bool(ctx.train_profile or ctx.station_profile or ctx.journey_insights)
+        groq_available = self._client is not None
 
-        # Path B: Clarification needed (Phase 3)
+        decision = decide_strategy(
+            intent=ctx.intent,
+            has_direct_answer=has_direct_answer,
+            has_journey=has_journey,
+            has_railway_intel=has_railway_intel,
+            needs_tools=needs_tools,
+            groq_available=groq_available,
+        )
+
+        self._response_engine = getattr(self, "_response_engine", None)
+        if self._response_engine is None:
+            self._response_engine = ResponseFormatter()
+
+        logger.info(
+            "[ENGINE] strategy=%s response_type=%s intent=%s",
+            decision.strategy.value, decision.response_type, ctx.intent.value,
+        )
+
+        # --------------------------------------------------------------
+        # DIRECT — Backend formats, no LLM
+        # --------------------------------------------------------------
+        if decision.strategy == ResponseStrategy.DIRECT:
+            if has_direct_answer and cap_result.answer:
+                return cap_result.answer, "capability", cap_result.tools_used, cap_result.route_data
+
+            formatted = self._response_engine.format_response(
+                response_type=decision.response_type,
+                ctx=ctx,
+                intent=ctx.intent,
+                cap_result=cap_result,
+            )
+            if formatted:
+                return formatted, "engine", cap_result.tools_used, cap_result.route_data
+
+            return (
+                self._build_fallback_response(ctx),
+                "engine", cap_result.tools_used, cap_result.route_data,
+            )
+
+        # --------------------------------------------------------------
+        # Path: Clarification needed (Phase 3)
+        # --------------------------------------------------------------
         if ctx.clarification and ctx.clarification.needed:
             logger.info(
                 "[ENGINE] clarification needed: %s", ctx.clarification.missing_type.value,
             )
+            formatted = self._response_engine.format_response(
+                response_type="clarification",
+                ctx=ctx, intent=ctx.intent, cap_result=cap_result,
+            )
+            if formatted:
+                return formatted, "clarification", [], None
             return ctx.clarification.question, "clarification", [], None
 
-        # Path C: Needs GTFS tools → fallback to foundry_agent
-        if cap_result.context_data.get("needs_tools"):
+        # --------------------------------------------------------------
+        # LLM_ONLY or HYBRID — needs tools → foundry_agent
+        # --------------------------------------------------------------
+        if needs_tools:
             logger.info("[ENGINE] needs_tools=True → delegating to foundry_agent")
             try:
                 foundry_result = foundry_transit_agent.answer(user_query)
@@ -261,12 +362,41 @@ class ConversationIntelligenceEngine:
                 fallback = self._build_fallback_response(ctx)
                 return fallback, "engine", [], None
 
-        # Path D: Standard LLM generation with context
+        # --------------------------------------------------------------
+        # HYBRID — Try Groq, fallback to DIRECT on failure
+        # --------------------------------------------------------------
+        if decision.strategy == ResponseStrategy.HYBRID:
+            if groq_available:
+                try:
+                    response = self._call_groq(ctx)
+                    return response, "groq", cap_result.tools_used, cap_result.route_data
+                except Exception as exc:
+                    logger.warning("[ENGINE] HYBRID Groq failed → DIRECT fallback: %s", exc)
+
+            formatted = self._response_engine.format_response(
+                response_type=decision.response_type,
+                ctx=ctx, intent=ctx.intent, cap_result=cap_result,
+            )
+            if formatted:
+                return formatted, "engine", cap_result.tools_used, cap_result.route_data
+
+            fallback = self._build_fallback_response(ctx)
+            return fallback, "engine", [], None
+
+        # --------------------------------------------------------------
+        # LLM_ONLY — Standard LLM generation
+        # --------------------------------------------------------------
         try:
             response = self._call_groq(ctx)
             return response, "groq", cap_result.tools_used, cap_result.route_data
         except Exception as exc:
             logger.warning("[ENGINE] Groq call failed: %s", exc)
+            formatted = self._response_engine.format_response(
+                response_type=decision.response_type,
+                ctx=ctx, intent=ctx.intent, cap_result=cap_result,
+            )
+            if formatted:
+                return formatted, "engine", [], None
             fallback = self._build_fallback_response(ctx)
             return fallback, "engine", [], None
 

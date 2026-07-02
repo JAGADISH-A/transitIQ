@@ -40,31 +40,54 @@ class JourneyIntentService:
 
             # "Avadi to Guindy" (short, no filler — only matches 1-3 word locations on each side)
             re.compile(r"^(?P<source>[A-Za-z]{2,}(?:\s+[A-Za-z]{2,}){0,2})\s+to\s+(?P<destination>[A-Za-z]{2,}(?:\s+[A-Za-z]{2,}){0,2})$", re.IGNORECASE),
+            
+            # Deterministic Fast Paths (ROUTE_CONTEXT_QA)
+            (re.compile(r"(?:tell\s+me\s+)?(?:all\s+)?(?:stations|stops)(?:\s+on\s+this\s+route)?$", re.IGNORECASE), IntentType.LIST_STOPS),
+            (re.compile(r"(?:what\s+time|when)\s+(?:do\s+i\s+)?(?:arrive|get\s+there|depart|leave|start)(?:\?)?$", re.IGNORECASE), IntentType.GET_ARRIVAL_DEPARTURE),
+            (re.compile(r"(?:arrival|departure)\s+time(?:\?)?$", re.IGNORECASE), IntentType.GET_ARRIVAL_DEPARTURE),
+            (re.compile(r"(?:where\s+(?:do\s+i|to)\s+)?(?:change\s+trains|transfer)(?:\?)?$", re.IGNORECASE), IntentType.GET_TRANSFER_INFO),
+            (re.compile(r"(?:how\s+many\s+transfers|transfer\s+station)(?:\?)?$", re.IGNORECASE), IntentType.GET_TRANSFER_INFO),
+            (re.compile(r"(?:how\s+long\s+(?:is\s+it|does\s+it\s+take)|duration)(?:\?)?$", re.IGNORECASE), IntentType.GET_DURATION),
         ]
 
     def _fast_extract(self, prompt: str) -> Optional[JourneyIntentResponse]:
         """Attempt to extract intent using regex patterns."""
-        for pattern in self.regex_patterns:
-            match = pattern.search(prompt.strip().rstrip('?.'))
-            if match:
-                groups = match.groupdict()
-                source = groups.get("source")
-                destination = groups.get("destination")
-                departure_time = groups.get("departure_time")
-                preference = groups.get("preference")
-                
-                if source or destination:
-                    return JourneyIntentResponse(
-                        intent_type=IntentType.NEW_SEARCH,
-                        source=source.strip() if source else None,
-                        destination=destination.strip() if destination else None,
-                        departure_time=departure_time.strip() if departure_time else None,
-                        preference=preference.strip() if preference else None
-                    )
+        for item in self.regex_patterns:
+            if isinstance(item, tuple):
+                pattern, intent_type = item
+                match = pattern.search(prompt.strip().rstrip('?.'))
+                if match:
+                    return JourneyIntentResponse(intent_type=intent_type)
+            else:
+                pattern = item
+                match = pattern.search(prompt.strip().rstrip('?.'))
+                if match:
+                    groups = match.groupdict()
+                    source = groups.get("source")
+                    destination = groups.get("destination")
+                    departure_time = groups.get("departure_time")
+                    preference = groups.get("preference")
+                    
+                    if source or destination:
+                        return JourneyIntentResponse(
+                            intent_type=IntentType.NEW_SEARCH,
+                            source=source.strip() if source else None,
+                            destination=destination.strip() if destination else None,
+                            departure_time=departure_time.strip() if departure_time else None,
+                            preference=preference.strip() if preference else None
+                        )
         return None
 
     def extract_intent(self, prompt: str, context: JourneyContext | None = None) -> JourneyIntentResponse:
         """Extract journey parameters and intent from a natural language prompt."""
+        import time
+        from app.utils.llm_stats import global_stats
+        
+        regex_success = False
+        llm_used = False
+        prompt_tokens = 0
+        comp_tokens = 0
+        latency = 0.0
         
         # 1. Check Context Expiration
         if context and context.last_updated:
@@ -94,6 +117,13 @@ class JourneyIntentService:
         # 2. Regex Fast Path
         intent = self._fast_extract(prompt)
         
+        if intent:
+            regex_success = True
+            global_stats.add_regex_success()
+        else:
+            global_stats.add_regex_failure()
+
+        
         if not intent and self.client:
             # 3. LLM Fallback Path
             logger.info("Regex failed, falling back to LLM for: %s", prompt)
@@ -110,14 +140,19 @@ class JourneyIntentService:
                     "- MODIFY_TIME: 'What about tomorrow morning?'\n"
                     "- MODIFY_FILTER: 'Show direct trains only'\n"
                     "- OPTIMIZE_ROUTE: 'Any faster options?'\n"
-                    "- EXPLAIN_ROUTE: 'How long is the transfer?'\n"
-                    "- ROUTE_CONTEXT_QA: 'Why was this route recommended?', 'Is the transfer risky?', 'What are the tradeoffs?'\n"
+                    "- EXPLAIN_ROUTE: 'Why was this route recommended?', 'Is the transfer risky?'\n"
+                    "- ROUTE_CONTEXT_QA: 'What are the tradeoffs?'\n"
+                    "- LIST_STOPS: 'List all stations', 'What are the stops?'\n"
+                    "- GET_ARRIVAL_DEPARTURE: 'When do I arrive?', 'Departure time'\n"
+                    "- GET_TRANSFER_INFO: 'Where do I change trains?', 'How many transfers?'\n"
+                    "- GET_DURATION: 'How long does it take?'\n"
                     "Return ONLY a valid JSON object matching this schema: "
                     "{ \"intent_type\": string, \"source\": string|null, \"destination\": string|null, "
                     "\"departure_time\": string|null, \"preference\": string|null }. "
                     "If a value is not mentioned in the prompt, use null. Do not fill missing locations from context yourself, the system will do it."
                 )
                 
+                start_time = time.perf_counter()
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=[
@@ -127,6 +162,12 @@ class JourneyIntentService:
                     response_format={"type": "json_object"},
                     temperature=0.0,
                 )
+                latency = time.perf_counter() - start_time
+                if response.usage:
+                    prompt_tokens = response.usage.prompt_tokens
+                    comp_tokens = response.usage.completion_tokens
+                    global_stats.add_llm_call(prompt_tokens, comp_tokens, latency)
+
                 
                 content = response.choices[0].message.content
                 if content:
@@ -144,7 +185,9 @@ class JourneyIntentService:
                         departure_time=parsed.get("departure_time"),
                         preference=parsed.get("preference"),
                     )
+                    llm_used = True
                     logger.info("LLM extraction — type: %s, source: %s, dest: %s", intent.intent_type, intent.source, intent.destination)
+
             except Exception as e:
                 logger.error("LLM extraction failed: %s", e)
         
@@ -159,6 +202,27 @@ class JourneyIntentService:
             if not intent.destination and context.destination:
                 intent.destination = context.destination
 
+        print("========== LLM Usage ==========")
+        print("Intent:")
+        if regex_success:
+            print("Regex ✓")
+        else:
+            print("Regex Failed")
+        
+        if llm_used:
+            print("LLM Fallback ✓")
+            
+        api_calls = 1 if llm_used else 0
+        print(f"\nAPI Calls: {api_calls}")
+        if llm_used:
+            print(f"Prompt Tokens: {prompt_tokens}")
+            print(f"Completion Tokens: {comp_tokens}")
+            print(f"Total Tokens: {prompt_tokens + comp_tokens}")
+            print(f"Latency: {latency:.2f} s")
+        print("===============================")
+        global_stats.print_cumulative()
+
         return intent
+
 
 journey_intent_service = JourneyIntentService()

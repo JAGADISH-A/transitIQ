@@ -136,8 +136,44 @@ class FoundryTransitAgent:
                 self.logger.error("[GROQ-INIT] Failed to initialize Groq client: %s", exc)
                 self._client = None
 
-    def _fast_path_route(self, user_query: str) -> Optional[Dict[str, Any]]:
+    def _fast_path_route(self, user_query: str, context: Optional[Dict[str, Any]] = None, intent: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Intent Router to bypass reasoning for simple transit lookups."""
+        
+        if context and intent:
+            route = context.get('route', {})
+            
+            if intent == "LIST_STOPS":
+                stops = context.get("stopSequence", [])
+                if stops:
+                    stop_names = [s.get("stop_name", "") for s in stops if isinstance(s, dict) and s.get("stop_name") != '---transfer---']
+                    answer = "Here are the stations on this route:\n" + "\n".join(f"- {name}" for name in stop_names if name)
+                    return {"answer": answer, "tools_used": [], "classification": "FAST_PATH"}
+                return {"answer": "I don't have the station list for this route.", "tools_used": [], "classification": "FAST_PATH"}
+                
+            if intent == "GET_ARRIVAL_DEPARTURE":
+                dep = route.get("departureTime", "unknown time")
+                arr = route.get("arrivalTime", "unknown time")
+                answer = f"You will depart at {dep} and arrive at {arr}."
+                return {"answer": answer, "tools_used": [], "classification": "FAST_PATH"}
+                
+            if intent == "GET_TRANSFER_INFO":
+                transfers = route.get("transferCount", 0)
+                if transfers == 0:
+                    answer = "This is a direct route with no transfers."
+                else:
+                    station = route.get("transferStopName", "a transfer station")
+                    wait = route.get("transferWait", "some")
+                    answer = f"You have {transfers} transfer(s). You will change trains at {station} with a wait time of {wait} minutes."
+                return {"answer": answer, "tools_used": [], "classification": "FAST_PATH"}
+                
+            if intent == "GET_DURATION":
+                duration = route.get("durationMinutes")
+                if duration:
+                    answer = f"The total journey will take about {duration} minutes."
+                else:
+                    answer = "I'm not sure exactly how long it takes, but you can check the route details above."
+                return {"answer": answer, "tools_used": [], "classification": "FAST_PATH"}
+
         patterns_trip = [
             re.compile(r"(?:route|trip|directions)\s+from\s+(.+?)\s+to\s+(.+?)(?:\Z|\?|\.)", re.IGNORECASE),
             re.compile(r"how\s+(?:do|can)\s+i\s+get\s+from\s+(.+?)\s+to\s+(.+?)(?:\Z|\?|\.)", re.IGNORECASE)
@@ -596,7 +632,7 @@ class FoundryTransitAgent:
     # Rich Route Context Builder
     # ------------------------------------------------------------------
 
-    def build_structured_route_context(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    def build_structured_route_context(self, context: Dict[str, Any], user_query: str, intent: Optional[str] = None) -> Dict[str, Any]:
         """Build a rich, structured route narrative context from raw dictionary.
 
         Omit missing/empty fields entirely to avoid placeholders.
@@ -609,232 +645,93 @@ class FoundryTransitAgent:
         transfer_risk = context.get('transferRisk', {})
         recommendation = context.get('recommendation', {})
         intel = context.get('workspaceIntelligence', {})
-        all_routes = context.get('allRoutes', [])
 
         structured = {}
 
-        # 1. Format duration helper
+        # Helper to format duration
         def get_duration_str(mins: Any) -> Optional[str]:
-            if not mins:
-                return None
+            if not mins: return None
             try:
                 m = int(float(mins))
-                if m < 60:
-                    return f"{m}m"
+                if m < 60: return f"{m}m"
                 h = m // 60
                 rem_m = m % 60
                 return f"{h}h {rem_m}m" if rem_m > 0 else f"{h}h"
             except (ValueError, TypeError):
                 return str(mins)
 
-        # Helper to validate a value is not empty or a placeholder
         def is_valid(val: Any) -> bool:
-            if val is None:
-                return False
+            if val is None: return False
             val_str = str(val).strip().upper()
-            if not val_str or val_str in ("N/A", "UNKNOWN", "NONE", "UNDEFINED"):
-                return False
+            if not val_str or val_str in ("N/A", "UNKNOWN", "NONE", "UNDEFINED"): return False
             return True
+            
+        q = user_query.lower()
+        
+        # Level 1: Journey Summary (Always included)
+        structured["origin"] = route.get("sourceName")
+        structured["destination"] = route.get("destName")
+        structured["duration"] = get_duration_str(route.get("durationMinutes"))
+        structured["transfers"] = route.get("transferCount", 0)
+        structured["departure"] = route.get("departureTime")
+        structured["arrival"] = route.get("arrivalTime")
+        
+        # Clean invalid values
+        structured = {k: v for k, v in structured.items() if is_valid(v) or isinstance(v, int)}
 
-        # 2. journeySummary
-        source = route.get("sourceName")
-        dest = route.get("destName")
-        dep_time = route.get("departureTime")
-        arr_time = route.get("arrivalTime")
-        duration = get_duration_str(route.get("durationMinutes"))
-        transfers = route.get("transferCount", 0)
+        # Level 2: Transfer Details
+        if "change" in q or "transfer" in q or "connection" in q or "wait" in q or intent == "EXPLAIN_ROUTE" or intent == "ROUTE_CONTEXT_QA":
+            if route.get("transferCount", 0) > 0:
+                structured["transfer_station"] = route.get("transferStopName")
+                structured["transfer_wait_mins"] = route.get("transferWait")
+                
+                risk_message = transfer_risk.get("message")
+                if is_valid(risk_message):
+                    structured["transfer_risk"] = risk_message
+                    
+        # Level 3: Train Info
+        if "train" in q or "platform" in q or "coach" in q:
+            # Add specific info if available
+            pass
+            
+        # Stop Lists are NEVER included for LLM processing anymore.
+        # They are handled by FAST_PATH.
 
-        summary_parts = []
-        if is_valid(source) and is_valid(dest):
-            summary_parts.append(f"{source} to {dest}")
-        if is_valid(dep_time):
-            summary_parts.append(f"departing at {dep_time}")
-        if is_valid(arr_time):
-            summary_parts.append(f"arriving at {arr_time}")
-        if is_valid(duration):
-            summary_parts.append(f"({duration} total)")
-
-        if transfers == 0:
-            summary_parts.append("direct service")
-        elif transfers == 1:
-            transfer_station = route.get("transferStopName")
-            if is_valid(transfer_station):
-                summary_parts.append(f"1 transfer at {transfer_station}")
-            else:
-                summary_parts.append("1 transfer")
-        else:
-            summary_parts.append(f"{transfers} transfers")
-
-        if summary_parts:
-            structured["journeySummary"] = " ".join(summary_parts)
-
-        # 3. transferDetails (omit if direct)
-        if transfers > 0:
-            transfer_station = route.get("transferStopName")
-            wait_mins = route.get("transferWait")
-            details = []
-            if is_valid(transfer_station):
-                details.append(f"Connection at {transfer_station}.")
-            if wait_mins is not None:
-                try:
-                    w = int(float(wait_mins))
-                    details.append(f"Waiting time is {w} minutes.")
-                except (ValueError, TypeError):
-                    details.append(f"Waiting time is {wait_mins} minutes.")
-
-            # Advice / instructions
-            risk_message = transfer_risk.get("message")
-            if is_valid(risk_message):
-                details.append(risk_message)
-
-            if details:
-                structured["transferDetails"] = " ".join(details)
-
-        # 4. recommendationReasons
-        reasons = recommendation.get("reasons") or []
-        rec_reason_str = recommendation.get("reason")
-        if rec_reason_str and rec_reason_str not in reasons:
-            reasons = [rec_reason_str] + list(reasons)
-
-        valid_reasons = [r for r in reasons if is_valid(r)]
-        if valid_reasons:
-            structured["recommendationReasons"] = valid_reasons
-
-        # 5. tradeoffs
-        # Extract from comparison tradeoff objects
-        tradeoff_objs = recommendation.get("comparison", {}).get("tradeoffs", []) or []
-        tradeoff_list = []
-        for t in tradeoff_objs:
-            title = t.get("title")
-            desc = t.get("description")
-            if is_valid(title) and is_valid(desc):
-                tradeoff_list.append(f"{title}: {desc}")
-            elif is_valid(desc):
-                tradeoff_list.append(desc)
-
-        # Also check direct tradeoffs list if any
-        direct_tradeoffs = context.get("tradeoffs", []) or []
-        for t in direct_tradeoffs:
-            if isinstance(t, dict):
-                desc = t.get("description") or t.get("title")
-                if is_valid(desc):
-                    tradeoff_list.append(desc)
-            elif is_valid(t):
-                tradeoff_list.append(str(t))
-
-        if tradeoff_list:
-            structured["tradeoffs"] = tradeoff_list
-
-        # 6. travelTips
-        tips = intel.get("tips") or []
-        valid_tips = [t for t in tips if is_valid(t)]
-        if valid_tips:
-            structured["travelTips"] = valid_tips
-
-        # 7. riskAssessment
-        risk_lvl = transfer_risk.get("level")
-        risk_msg = transfer_risk.get("message")
-        risk_title = transfer_risk.get("title")
-
-        risk_parts = []
-        if is_valid(risk_lvl):
-            risk_parts.append(f"Level: {risk_lvl.upper()}")
-        if is_valid(risk_title):
-            risk_parts.append(risk_title)
-        if is_valid(risk_msg) and risk_msg not in risk_parts:
-            risk_parts.append(risk_msg)
-
-        if risk_parts:
-            structured["riskAssessment"] = " — ".join(risk_parts)
-
-        # 8. bestAlternative & alternativeReason (Alternatives should be ranked)
-        if all_routes:
-            active_id = route.get("id")
-            # Filter out active route
-            alts = [r for r in all_routes if r.get("id") != active_id]
-            if alts:
-                # Rank: If active is NOT the recommended route, the recommended route is the best alternative
-                rec_route_id = recommendation.get("recommendedRouteId")
-                best_alt = None
-                alt_reason = ""
-
-                if rec_route_id and active_id != rec_route_id:
-                    rec_alt = next((r for r in alts if r.get("id") == rec_route_id), None)
-                    if rec_alt:
-                        best_alt = rec_alt
-                        alt_reason = "This is TransitIQ's recommended route because it offers the optimal balance of speed and transfer safety."
-
-                # Otherwise, find the fastest alternative or the one with fewer transfers
-                if not best_alt:
-                    # Sort alternatives by duration
-                    sorted_alts = sorted(alts, key=lambda x: x.get("durationMinutes", 999999))
-                    if sorted_alts:
-                        best_alt = sorted_alts[0]
-                        active_dur = route.get("durationMinutes", 0)
-                        best_alt_dur = best_alt.get("durationMinutes", 0)
-
-                        if best_alt_dur < active_dur:
-                            diff = active_dur - best_alt_dur
-                            alt_reason = f"Faster journey by {diff} minutes, but requires {best_alt.get('transferCount', 0)} transfer(s)."
-                        elif best_alt.get("transferCount", 0) < route.get("transferCount", 0):
-                            alt_reason = "Requires fewer connections, making it a more direct but potentially slower choice."
-                        else:
-                            alt_reason = "An alternative route choice with a different time schedule."
-
-                if best_alt:
-                    alt_duration = get_duration_str(best_alt.get("durationMinutes"))
-                    structured["bestAlternative"] = {
-                        "source": best_alt.get("sourceName"),
-                        "destination": best_alt.get("destName"),
-                        "duration": alt_duration,
-                        "transfers": best_alt.get("transferCount", 0),
-                        "transferStation": best_alt.get("transferStopName") if best_alt.get("isTransfer") else None
-                    }
-                    # Clean bestAlternative dictionary of any invalid values
-                    structured["bestAlternative"] = {k: v for k, v in structured["bestAlternative"].items() if is_valid(v)}
-                    structured["alternativeReason"] = alt_reason
-
-        # 9. Real Delay Data (only if real delay data exists)
-        if "delayMinutes" in route and is_valid(route.get("delayMinutes")):
-            structured["delayMinutes"] = route.get("delayMinutes")
-        if "delayStatus" in route and is_valid(route.get("delayStatus")):
-            structured["delayStatus"] = route.get("delayStatus")
-
-        # 10. Stop Sequence (intermediate stations)
-        stop_sequence = context.get('stopSequence') if isinstance(context, dict) else None
-        if stop_sequence and isinstance(stop_sequence, list) and len(stop_sequence) > 0:
-            valid_stops = []
-            transfer_marker = {"stop_name": "--- TRANSFER ---", "stop_sequence": -1}
-            for s in stop_sequence:
-                if isinstance(s, dict):
-                    name = s.get('stop_name', '')
-                    seq = s.get('stop_sequence', 0)
-                    if name == '---transfer---':
-                        valid_stops.append(transfer_marker)
-                    elif name:
-                        valid_stops.append({"stop_name": name, "stop_sequence": seq})
-            if valid_stops:
-                self.logger.info("[BUILD-CTX] stopSequence: %d valid stops", len(valid_stops))
-                structured["stopSequence"] = valid_stops
-
-        return structured
+        return {k: v for k, v in structured.items() if v is not None}
 
     # ------------------------------------------------------------------
     # Main answer method
     # ------------------------------------------------------------------
 
-    def answer(self, user_query: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def answer(self, user_query: str, context: Optional[Dict[str, Any]] = None, intent: Optional[str] = None) -> Dict[str, Any]:
         """Answer the user query using Foundry tool-calling when available.
 
         If the Foundry project endpoint is not configured, the method falls back to
         the existing planner logic so the API remains usable in local development.
         """
+        import time
+        import json
+        from app.utils.llm_stats import global_stats
+        
+        total_prompt = 0
+        total_comp = 0
+        total_latency = 0.0
+        api_calls = 0
+
         start_time = time.perf_counter()
 
-        fast_result = self._fast_path_route(user_query)
+        fast_result = self._fast_path_route(user_query, context, intent)
         if fast_result is not None:
             self.logger.info("[ROUTER] Query classified as FAST_PATH")
             elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+            
+            print("========== LLM Usage ==========")
+            print("Response:")
+            print("Strategy: FAST_PATH (No LLM)")
+            print("\nAPI Calls: 0")
+            print("===============================")
+            global_stats.print_cumulative()
+
             return {
                 **fast_result,
                 "classification": "FAST_PATH",
@@ -890,18 +787,24 @@ class FoundryTransitAgent:
             "- NEVER describe a tool call in prose instead of actually invoking it.\n"
             "- If you need to call a tool, use the tool_calls mechanism. Do NOT output the call as text.\n"
             "- Each tool call must include the function name and a valid JSON arguments object.\n"
-            "- After receiving tool results, synthesize a concise answer following the rules above."
+            "- After receiving tool results, synthesize a concise answer following the rules above.\n"
+            "- Function-like XML tags (e.g. <function=find_trip>{...}</function>) must NEVER appear in normal responses.\n"
+            "- If no tool is needed, answer directly without fake XML tags."
         )
+
+        original_size = len(json.dumps(context)) if context else 0
+        optimized_size = 0
 
         if context:
             try:
                 # Format context clearly for the LLM using our Structured Context Builder
-                structured_ctx = self.build_structured_route_context(context)
+                structured_ctx = self.build_structured_route_context(context, user_query, intent)
+                optimized_size = len(json.dumps(structured_ctx)) if structured_ctx else 0
+                
                 self.logger.warning("[ANSWER-DEBUG] structured_ctx keys = %s", list(structured_ctx.keys()) if structured_ctx else "EMPTY")
                 self.logger.warning("[ANSWER-DEBUG] has stopSequence in structured_ctx = %s", 'stopSequence' in structured_ctx if structured_ctx else False)
                 
                 if structured_ctx:
-                    import json
                     ctx_json = json.dumps(structured_ctx, indent=2)
                     self.logger.warning("[ANSWER-DEBUG] system_prompt context JSON:\n%s", ctx_json)
                     system_prompt += (
@@ -933,6 +836,8 @@ class FoundryTransitAgent:
             try:
                 self.logger.warning("[GROQ-DIAG] Calling Groq API: model=%s, messages_count=%d, tools_count=%d",
                     self.model, len(messages), len(self.tool_definitions()))
+                
+                start_call = time.perf_counter()
                 response = self._client.chat.completions.create(
                     model=self.model,
                     messages=messages,
@@ -940,10 +845,30 @@ class FoundryTransitAgent:
                     tool_choice="auto",
                     temperature=0.1,
                 )
+                call_lat = time.perf_counter() - start_call
+                api_calls += 1
+                
+                if response.usage:
+                    pt = response.usage.prompt_tokens
+                    ct = response.usage.completion_tokens
+                    total_prompt += pt
+                    total_comp += ct
+                    total_latency += call_lat
+                    global_stats.add_llm_call(pt, ct, call_lat)
+                    
                 self.logger.warning("[GROQ-DIAG] Groq API call succeeded")
+
             except Exception as api_exc:
                 self.logger.error("[GROQ-DIAG] Groq API call failed: %s", api_exc)
                 elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+                
+                print("========== LLM Usage ==========")
+                print("Response:")
+                print("Strategy: REASONING_PATH (LLM Failed)")
+                print(f"\nAPI Calls: {api_calls}")
+                print("===============================")
+                global_stats.print_cumulative()
+                
                 return {
                     "answer": ai_planner.answer_query(user_query).get("answer", "I could not find a matching destination."),
                     "provider": "local",
@@ -955,6 +880,14 @@ class FoundryTransitAgent:
             if not response.choices:
                 self.logger.warning("[GROQ-DIAG] WARNING: response.choices is empty/None!")
                 elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+                
+                print("========== LLM Usage ==========")
+                print("Response:")
+                print("Strategy: REASONING_PATH (LLM Empty)")
+                print(f"\nAPI Calls: {api_calls}")
+                print("===============================")
+                global_stats.print_cumulative()
+
                 return {
                     "answer": ai_planner.answer_query(user_query).get("answer", "I could not generate a response."),
                     "provider": "local",
@@ -1144,6 +1077,25 @@ class FoundryTransitAgent:
         self.logger.info(f"RETURN FINAL_ANSWER: {final_answer}")
         self.logger.info(f"RETURN TOOLS_USED: {tool_calls_used}")
         self.logger.info(f"RETURN PROVIDER: groq")
+
+        print("========== LLM Usage ==========")
+        print("Response:")
+        print("Strategy: REASONING_PATH (LLM)")
+        if api_calls > 0:
+            print("LLM ✓")
+        print(f"\nAPI Calls: {api_calls}")
+        if api_calls > 0:
+            print(f"Prompt Tokens: {total_prompt}")
+            print(f"Completion Tokens: {total_comp}")
+            print(f"Total Tokens: {total_prompt + total_comp}")
+            print(f"Latency: {total_latency:.2f} s")
+            if original_size > 0:
+                print(f"Original Context Size: {original_size} chars")
+                print(f"Optimized Context Size: {optimized_size} chars")
+                reduction = 100 - (optimized_size / original_size * 100) if original_size else 0
+                print(f"Context Reduction: {reduction:.1f}%")
+        print("===============================")
+        global_stats.print_cumulative()
 
         elapsed_ms = int((time.perf_counter() - start_time) * 1000)
         return {

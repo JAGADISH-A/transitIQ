@@ -111,17 +111,17 @@ class ReferenceResolver:
         if match:
             return self._resolve_comparative(match, ctx)
 
-        # 5. Pronoun: "it", "that", "this"
+        # 5. Preposition + time: "after that", "before 8 AM" (before pronouns to avoid "that" catching "after that")
+        if re.search(r"\b(after|before|around|by)\s", q, re.IGNORECASE):
+            return self._resolve_preposition_time(q, ctx)
+
+        # 6. Pronoun: "it", "that", "this"
         if self._PRONOUN_PATTERN.search(q):
             return self._resolve_pronoun(q, ctx)
 
-        # 6. Locative: "here", "there"
+        # 7. Locative: "here", "there"
         if self._LOCATIVE_PATTERN.search(q):
             return self._resolve_locative(q, ctx)
-
-        # 7. Any remaining preposition + time: "after that", "before 8 AM"
-        if re.search(r"\b(after|before|around|by)\s", q):
-            return self._resolve_preposition_time(q, ctx)
 
         return ResolvedReference()
 
@@ -336,7 +336,7 @@ class ReferenceResolver:
         q_lower = query.lower()
         journey = ctx.current_journey
 
-        if "here" in q_lower and journey:
+        if re.search(r"\bhere\b", q_lower) and journey:
             return ResolvedReference(
                 type=ReferenceType.LOCATIVE,
                 value=journey.origin,
@@ -344,7 +344,7 @@ class ReferenceResolver:
                 source="journey_origin",
             )
 
-        if "there" in q_lower and journey:
+        if re.search(r"\bthere\b", q_lower) and journey:
             return ResolvedReference(
                 type=ReferenceType.LOCATIVE,
                 value=journey.destination,

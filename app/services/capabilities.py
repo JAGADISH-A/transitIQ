@@ -158,7 +158,12 @@ class JourneyContextCapability(BaseCapability):
         return CapabilityType.JOURNEY_CONTEXT
 
     def can_handle(self, intent: IntentType) -> bool:
-        return intent in self._HANDLED_INTENTS
+        if intent in self._HANDLED_INTENTS:
+            return True
+        if intent == IntentType.TRAIN_INFORMATION:
+            from app.services.session_manager import session_manager
+            return session_manager.has_active_journey()
+        return False
 
     def execute(self, ctx: ConversationContext) -> CapabilityResult:
         if ctx.current_journey is None:

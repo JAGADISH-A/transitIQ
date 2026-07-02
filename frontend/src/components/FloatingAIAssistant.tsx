@@ -687,7 +687,7 @@ export default function FloatingAIAssistant({
            const foundryRes = await fetch(`${API_BASE}/agent/foundry`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ query: text, context: sessionContext })
+              body: JSON.stringify({ query: text, context: sessionContext, intent: intent.intent_type })
            });
            console.log('[DEBUG-FOUNDRY] Response status:', foundryRes.status, foundryRes.statusText);
            if (!foundryRes.ok) {

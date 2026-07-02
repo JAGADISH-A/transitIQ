@@ -65,6 +65,8 @@ def ask_foundry(query: Dict[str, Any] = Body(..., description="Foundry request p
 
         user_query = query.get("query") if isinstance(query, dict) else None
         context = query.get("context") if isinstance(query, dict) else None
+        intent = query.get("intent") if isinstance(query, dict) else None
+
         
         logger.warning("[FOUNDRY-API] query = %s", user_query)
         if context:
@@ -84,7 +86,7 @@ def ask_foundry(query: Dict[str, Any] = Body(..., description="Foundry request p
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="query must be a non-empty string.")
 
         logger.warning("[FOUNDRY-API] calling foundry_transit_agent.answer()")
-        result = foundry_transit_agent.answer(user_query, context=context)
+        result = foundry_transit_agent.answer(user_query, context=context, intent=intent)
         return {
             "answer": result.get("answer", "I could not generate a response."),
             "provider": result.get("provider", "foundry"),
