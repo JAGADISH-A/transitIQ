@@ -677,12 +677,7 @@ export default function FloatingAIAssistant({
       if (sessionContext?.route && !isExplicitNewSearch) {
          // Treat as Route Context QA
          try {
-             query: text,
-             contextKeys: Object.keys(sessionContext),
-             hasRoute: !!sessionContext.route,
-             hasStopSequence: Array.isArray((sessionContext as any).stopSequence) && (sessionContext as any).stopSequence.length > 0,
-             stopSequenceLength: Array.isArray((sessionContext as any).stopSequence) ? (sessionContext as any).stopSequence.length : 0,
-           });
+
            const foundryRes = await fetch(`${API_BASE}/agent/foundry`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },

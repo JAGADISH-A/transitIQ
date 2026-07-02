@@ -84,13 +84,7 @@ export const RouteCard: React.FC<RouteCardProps> = ({ route, onClick, isHero = f
     else if (id) trainLabel = `Train No. ${id}`;
   }
 
-  if (route.transferCount === 2) {
-      source: route.sourceName,
-      destination: route.destName,
-      transferCount: route.transferCount,
-      hasThirdLeg: !!(route.originalData as any).third_leg
-    });
-  }
+
 
   return (
     <div

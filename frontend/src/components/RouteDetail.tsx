@@ -24,13 +24,7 @@ export const RouteDetail: React.FC<RouteDetailProps> = ({
   const isTransfer = route.isTransfer;
 
 
-  if (route.transferCount === 2) {
-      source: route.sourceName,
-      destination: route.destName,
-      transferCount: route.transferCount,
-      hasThirdLeg: !!(route.originalData as any).third_leg
-    });
-  }
+
 
   const duration = route.durationMinutes;
   

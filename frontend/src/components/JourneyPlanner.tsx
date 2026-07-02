@@ -144,12 +144,7 @@ export default function JourneyPlanner({
       }
 
       if (!finalSource || !finalDest) {
-          reason: 'source or destination could not be resolved',
-          source: sourceQuery,
-          destination: destQuery,
-          sourceSuggestionsLength: sourceSuggestions.length,
-          destSuggestionsLength: destSuggestions.length
-        });
+
         return;
       }
 

@@ -294,13 +294,7 @@ export default function JourneyExplorer({
             </div>
           ) : (
             displayRoutes.map((route) => {
-              if (route.transferCount === 2) {
-                  source: route.sourceName,
-                  destination: route.destName,
-                  transferCount: route.transferCount,
-                  hasThirdLeg: !!(route.originalData as any).third_leg
-                });
-              }
+
               return (
                 <RoutePreview
                   key={route.id}

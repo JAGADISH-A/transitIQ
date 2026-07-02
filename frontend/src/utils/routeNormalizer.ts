@@ -67,18 +67,12 @@ export function normalizeRoutes(routes: JourneyRoute[], transferRoutes: Transfer
         originalData: r
       };
 
-        source: route.sourceName,
-        destination: route.destName,
-        transferCount: route.transferCount
-      });
+
 
       return route;
     });
 
   const allRoutes = [...direct, ...transfers];
-  if (routes && routes.length > 0) {
-  }
-  if (transferRoutes && transferRoutes.length > 0) {
-  }
+
   return allRoutes;
 }
