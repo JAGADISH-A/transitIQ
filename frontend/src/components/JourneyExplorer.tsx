@@ -295,7 +295,6 @@ export default function JourneyExplorer({
           ) : (
             displayRoutes.map((route) => {
               if (route.transferCount === 2) {
-                console.log("[2_TRANSFER_RENDER]", {
                   source: route.sourceName,
                   destination: route.destName,
                   transferCount: route.transferCount,

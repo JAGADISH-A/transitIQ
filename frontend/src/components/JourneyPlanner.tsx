@@ -112,7 +112,6 @@ export default function JourneyPlanner({
   }, [debouncedDestQuery, selectedDest]);
 
   const handleSearch = async () => {
-    console.log('[SEARCH_BUTTON_CLICKED]');
     setIsSearchSubmitting(true);
     setLoadingText('Searching Stops...');
 
@@ -129,7 +128,6 @@ export default function JourneyPlanner({
           finalSource = data.results[0];
           setSelectedSource(finalSource);
           setSourceQuery(finalSource!.stop_name);
-          console.log('[SOURCE_RESOLVED]');
         }
       }
 
@@ -142,12 +140,10 @@ export default function JourneyPlanner({
           finalDest = data.results[0];
           setSelectedDest(finalDest);
           setDestQuery(finalDest!.stop_name);
-          console.log('[DESTINATION_RESOLVED]');
         }
       }
 
       if (!finalSource || !finalDest) {
-        console.log('[SEARCH_ABORTED]', {
           reason: 'source or destination could not be resolved',
           source: sourceQuery,
           destination: destQuery,
@@ -163,9 +159,7 @@ export default function JourneyPlanner({
       }
       
       setLoadingText('Finding Routes...');
-      console.log('[JOURNEY_REQUEST_START]');
       await onSearch(finalSource, finalDest, timeToSend);
-      console.log('[JOURNEY_REQUEST_COMPLETE]');
     } catch (err) {
       console.error('Error during search resolution:', err);
     } finally {

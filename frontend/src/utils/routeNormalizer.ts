@@ -67,7 +67,6 @@ export function normalizeRoutes(routes: JourneyRoute[], transferRoutes: Transfer
         originalData: r
       };
 
-      console.log("[2_TRANSFER_NORMALIZED]", {
         source: route.sourceName,
         destination: route.destName,
         transferCount: route.transferCount
@@ -77,14 +76,9 @@ export function normalizeRoutes(routes: JourneyRoute[], transferRoutes: Transfer
     });
 
   const allRoutes = [...direct, ...transfers];
-  console.log("=== NORMALIZATION AUDIT ===");
   if (routes && routes.length > 0) {
-    console.log("RAW DIRECT ROUTE[0]", routes[0]);
-    console.log("NORMALIZED DIRECT ROUTE[0]", direct[0]);
   }
   if (transferRoutes && transferRoutes.length > 0) {
-    console.log("RAW TRANSFER ROUTE[0]", transferRoutes[0]);
-    console.log("NORMALIZED TRANSFER ROUTE[0]", transfers[0]);
   }
   return allRoutes;
 }

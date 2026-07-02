@@ -1,5 +1,5 @@
-import { useEffect, useMemo, Fragment } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, CircleMarker } from 'react-leaflet';
+import { useEffect, useMemo, Fragment, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, CircleMarker, Pane } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { TripStop, NormalizedRoute, TransferJourney } from '../../types/transit';
@@ -24,9 +24,8 @@ const BoundsUpdater = ({ bounds, selectedRouteId }: { bounds: L.LatLngBounds | n
   const map = useMap();
   useEffect(() => {
     if (bounds && bounds.isValid()) {
-      console.log("[MAP_NAV_DEBUG] fitBounds called with padding [50, 50] for selectedRouteId:", selectedRouteId);
       map.fitBounds(bounds, {
-        padding: [50, 50]
+        padding: [100, 100]
       });
     }
   }, [map, bounds, selectedRouteId]);
@@ -61,6 +60,185 @@ const createCustomIcon = (color: string, radius: number = 14) => {
   });
 };
 
+// --- Smooth Curve Algorithm (Distance-Adaptive) ---
+function getSmoothSpline(points: [number, number][]): [number, number][] {
+  if (points.length < 3) return points;
+  
+  const p = [points[0], ...points, points[points.length - 1]];
+  const result: [number, number][] = [];
+
+  for (let i = 1; i < p.length - 2; i++) {
+    const p0 = p[i - 1];
+    const p1 = p[i];
+    const p2 = p[i + 1];
+    const p3 = p[i + 2];
+
+    // Adaptive segments based on distance
+    const dist = Math.hypot(p1[0] - p2[0], p1[1] - p2[1]);
+    const segments = Math.max(3, Math.min(20, Math.floor(dist * 1000)));
+
+    for (let t = 0; t < segments; t++) {
+      const t1 = t / segments;
+      const t2 = t1 * t1;
+      const t3 = t2 * t1;
+
+      const q0 = -t3 + 2.0 * t2 - t1;
+      const q1 = 3.0 * t3 - 5.0 * t2 + 2.0;
+      const q2 = -3.0 * t3 + 4.0 * t2 + t1;
+      const q3 = t3 - t2;
+
+      const lat = 0.5 * (p0[0] * q0 + p1[0] * q1 + p2[0] * q2 + p3[0] * q3);
+      const lng = 0.5 * (p0[1] * q0 + p1[1] * q1 + p2[1] * q2 + p3[1] * q3);
+
+      result.push([lat, lng]);
+    }
+  }
+  result.push(points[points.length - 1]);
+  return result;
+}
+
+// --- Animated Route Rendering Component ---
+const AnimatedRoute = ({ positions, innerColor, outerColor, isCompleteRoute = false }: { positions: [number, number][], innerColor: string, outerColor: string, isCompleteRoute?: boolean }) => {
+  const outerRef = useRef<any>(null);
+  const innerRef = useRef<any>(null);
+  const tiesRef = useRef<any>(null);
+  const smoothPositions = useMemo(() => getSmoothSpline(positions), [positions]);
+
+  useEffect(() => {
+    // Keep track of elements to clean up later
+    const animatedEls: SVGElement[] = [];
+    
+    // Robust animation fallback
+    const animateDraw = (ref: React.RefObject<any>) => {
+      try {
+        if (ref.current && ref.current.getElement) {
+          const el = ref.current.getElement();
+          if (el && el instanceof SVGPathElement) {
+            const length = el.getTotalLength();
+            if (length > 0) {
+              // Ensure path is rendered before animating
+              el.style.setProperty('--path-length', `${length}`);
+              el.classList.add('route-path-animated');
+              animatedEls.push(el);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Route animation failed", e);
+      }
+    };
+    
+    // Slight delay to ensure DOM is ready
+    const timer = setTimeout(() => {
+      animateDraw(outerRef);
+      animateDraw(innerRef);
+      // We do not animate tiesRef because it has its own dashArray that conflicts with the animation
+    }, 100);
+    
+    // After animation finishes, remove the class so zooming works correctly without path-length gaps
+    const cleanupTimer = setTimeout(() => {
+      animatedEls.forEach(el => el.classList.remove('route-path-animated'));
+    }, 3000);
+    
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(cleanupTimer);
+    };
+  }, [smoothPositions, isCompleteRoute]);
+
+  return (
+    <>
+      {/* 1. Outer Shadow/Glow */}
+      <Polyline 
+        ref={outerRef}
+        positions={smoothPositions} 
+        color={outerColor} 
+        weight={isCompleteRoute ? 4 : 8} 
+        opacity={isCompleteRoute ? 0.2 : 0.4} 
+        lineCap="round" 
+        lineJoin="round" 
+      />
+      {/* 2. Inner Track Base */}
+      <Polyline 
+        ref={innerRef}
+        positions={smoothPositions} 
+        color={innerColor} 
+        weight={isCompleteRoute ? 2 : 4} 
+        opacity={isCompleteRoute ? 0.4 : 1} 
+        lineCap="round" 
+        lineJoin="round" 
+      />
+      {/* 3. Railway Ties (Dashed layer, only for active journey) */}
+      {!isCompleteRoute && (
+        <Polyline 
+          ref={tiesRef}
+          positions={smoothPositions} 
+          color="#111111" 
+          weight={2} 
+          opacity={0.7} 
+          dashArray="2, 8"
+          lineCap="butt" 
+          lineJoin="round" 
+        />
+      )}
+      {!isCompleteRoute && <AnimatedTrainMarker path={smoothPositions} />}
+    </>
+  );
+};
+
+// --- Animated Train Marker Component ---
+const AnimatedTrainMarker = ({ path }: { path: [number, number][] }) => {
+  const markerRef = useRef<any>(null);
+  
+  useEffect(() => {
+    if (!markerRef.current || path.length < 2) return;
+    
+    let animationFrameId: number;
+    let startTime: number | null = null;
+    const duration = Math.max(path.length * 15, 3000); 
+    const totalPoints = path.length;
+
+    const animate = (timestamp: number) => {
+      if (!startTime) startTime = timestamp;
+      const progress = ((timestamp - startTime) % duration) / duration;
+      
+      const index = Math.floor(progress * (totalPoints - 1));
+      const nextIndex = Math.min(index + 1, totalPoints - 1);
+      
+      const point1 = path[index];
+      const point2 = path[nextIndex];
+      
+      const segmentProgress = (progress * (totalPoints - 1)) % 1;
+      
+      const lat = point1[0] + (point2[0] - point1[0]) * segmentProgress;
+      const lng = point1[1] + (point2[1] - point1[1]) * segmentProgress;
+      
+      markerRef.current.setLatLng([lat, lng]);
+      
+      animationFrameId = requestAnimationFrame(animate);
+    };
+    
+    animationFrameId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [path]);
+
+  const trainIcon = useMemo(() => L.divIcon({
+    className: 'moving-train-icon',
+    html: `<div style="
+      width: 8px; 
+      height: 8px; 
+      background: #F59E0B; 
+      border-radius: 50%; 
+      box-shadow: 0 0 8px #FF8A00, 0 0 12px #FF8A00;
+    "></div>`,
+    iconSize: [8, 8],
+    iconAnchor: [4, 4]
+  }), []);
+
+  return <Marker ref={markerRef} position={path[0]} icon={trainIcon} zIndexOffset={100} />;
+};
+
+
 export default function TransitMap({ 
   sourcePosition, 
   destinationPosition,
@@ -76,27 +254,11 @@ export default function TransitMap({
   transferStops = null,
   focusedLocation = null
 }: TransitMapProps) {
-  // If neither is provided, center somewhere default (e.g., Chennai)
   const defaultCenter: [number, number] = [13.0827, 80.2707];
   
-  console.log("[MAP_DEBUG]", {
-    routeShape,
-    transferShapes,
-    tripStops,
-    transferStops
-  });
-
   const extRoute = selectedRoute?.originalData as TransferJourney | undefined;
   const selectedTransferRoute = propSelectedTransferRoute || (selectedRoute?.isTransfer ? selectedRoute.originalData as TransferJourney : null);
 
-  if (extRoute) {
-    console.log("[LEG3_SHAPE_CHECK]", {
-      hasThirdLeg: !!extRoute.third_leg,
-      thirdLegShapeId: extRoute.third_leg?.shape_id,
-      thirdLegTripId: extRoute.third_leg?.trip_id
-    });
-  }
-  
   const activePoints: [number, number][] = [];
   if (sourcePosition) activePoints.push(sourcePosition);
   if (destinationPosition) activePoints.push(destinationPosition);
@@ -165,7 +327,12 @@ export default function TransitMap({
         ? shape
         : getStopsCoordinates(stops);
 
-      return legShape ? { full: legShape, journey: legShape } : null;
+      if (!legShape) return null;
+
+      const start = 0;
+      const end = legShape.length - 1;
+
+      return legShape ? { full: legShape, journey: legShape.slice(start, end + 1) } : null;
     });
   }, [legs, transferShapes, transferStops]);
 
@@ -204,7 +371,7 @@ export default function TransitMap({
       if (viewMode !== 'full' && !isWithinSegment) return null;
 
       const color = isWithinSegment ? segmentColor : '#888888';
-      const radius = isWithinSegment ? 4 : 3;
+      const radius = isWithinSegment ? 3 : 2;
 
       return (
         <CircleMarker
@@ -236,7 +403,6 @@ export default function TransitMap({
       allPoints = allPoints.concat(transferPositions);
     }
 
-    // Always include the journey's actual curved path in the bounding box
     if (routeSegments.journey && routeSegments.journey.length > 0) {
       allPoints = allPoints.concat(routeSegments.journey);
     }
@@ -246,7 +412,6 @@ export default function TransitMap({
       }
     });
 
-    // Include the full un-trimmed shapes only if viewMode requires it
     if (viewMode === 'full') {
       if (routeSegments.full && routeSegments.full.length > 0) {
         allPoints = allPoints.concat(routeSegments.full);
@@ -265,31 +430,6 @@ export default function TransitMap({
     ? [selectedTransferRoute.transfer_stop, selectedTransferRoute.transfer_stop_2].filter(Boolean) as string[]
     : [];
 
-  // Temporary logs for debugging Map route & viewport state
-  const debugJourneyCoords = routeSegments.journey || [];
-  const debugTransferCoords = transferSegments.flatMap(seg => seg?.journey || []);
-  const totalRouteCoordsCount = debugJourneyCoords.length + debugTransferCoords.length;
-
-  console.log("[MAP_DEBUG_STATE]", {
-    selectedRouteId: selectedRoute?.id || null,
-    routeCoordinateCount: totalRouteCoordsCount,
-    startCoordinate: sourcePosition || null,
-    destinationCoordinate: destinationPosition || null,
-    computedBounds: bounds ? [
-      [bounds.getSouthWest().lat, bounds.getSouthWest().lng],
-      [bounds.getNorthEast().lat, bounds.getNorthEast().lng]
-    ] : null,
-    markerCount: (sourcePosition ? 1 : 0) + (destinationPosition ? 1 : 0) + transferPositions.length + tripStops.length
-  });
-
-  // Verify coordinates are valid numbers and in [lat, lng] format
-  const allCoordinatesToVerify = [...debugJourneyCoords, ...debugTransferCoords];
-  allCoordinatesToVerify.forEach((pt, i) => {
-    if (!pt || pt.length < 2 || typeof pt[0] !== 'number' || typeof pt[1] !== 'number' || isNaN(pt[0]) || isNaN(pt[1])) {
-      console.warn(`[MAP_WARNING] Invalid coordinate at index ${i}:`, pt);
-    }
-  });
-
   return (
     <div className="w-full h-full relative z-0">
       <MapContainer
@@ -298,37 +438,64 @@ export default function TransitMap({
         style={{ width: '100%', height: '100%', background: '#0F0F0F' }}
         zoomControl={false}
       >
+        {/* Base Map without Labels */}
         <TileLayer
           attribution='&copy; <a href="https://carto.com/">CartoDB</a>'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          url="https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png"
         />
         
+        {/* Render Base Non-Transfer Journey Lines */}
         {routeSegments.full && viewMode === 'full' && routeSegments.full.length >= 2 && (
-          <Polyline positions={routeSegments.full} color="#9CA3AF" weight={3} opacity={0.4} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
+          <AnimatedRoute 
+            positions={routeSegments.full} 
+            innerColor="#9CA3AF" 
+            outerColor="#4B5563" 
+            isCompleteRoute={true} 
+          />
         )}
         
         {routeSegments.journey && routeSegments.journey.length >= 2 && (
-          <Polyline positions={routeSegments.journey} color="#F97316" weight={4} opacity={0.9} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
+          <AnimatedRoute 
+            positions={routeSegments.journey} 
+            innerColor="#F59E0B" 
+            outerColor="#B45309" 
+          />
         )}
 
-        {/* Render transfer route polylines */}
+        {/* Render Transfer Lines */}
         {transferSegments.map((seg, idx) => {
           if (!seg) return null;
-          const colors = ['#F97316', '#fb923c', '#fdba74', '#fed7aa'];
-          const color = colors[idx % colors.length];
-          const opacity = 0.9 - (idx * 0.1);
+          const innerColors = ['#F59E0B', '#F97316', '#F59E0B', '#F97316'];
+          const outerColors = ['#B45309', '#C2410C', '#B45309', '#C2410C'];
+          
+          const innerColor = innerColors[idx % innerColors.length];
+          const outerColor = outerColors[idx % outerColors.length];
 
           return (
             <Fragment key={`dynamic-leg-polyline-${idx}`}>
               {seg.full && viewMode === 'full' && seg.full.length >= 2 && (
-                <Polyline positions={seg.full} color="#9CA3AF" weight={3} opacity={0.4} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
+                <AnimatedRoute 
+                  positions={seg.full} 
+                  innerColor="#9CA3AF" 
+                  outerColor="#4B5563" 
+                  isCompleteRoute={true} 
+                />
               )}
               {seg.journey && seg.journey.length >= 2 && (
-                <Polyline positions={seg.journey} color={color} weight={4} opacity={opacity} lineCap="round" lineJoin="round" className="animate-in fade-in duration-700" />
+                <AnimatedRoute 
+                  positions={seg.journey} 
+                  innerColor={innerColor} 
+                  outerColor={outerColor} 
+                />
               )}
             </Fragment>
           );
         })}
+
+        {/* Labels Overlay (rendered above vectors but below markers naturally via Leaflet panes) */}
+        <Pane name="labels" style={{ zIndex: 450, pointerEvents: 'none' }}>
+          <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png" />
+        </Pane>
 
         {/* Intermediate Stop Markers */}
         {tripStops && tripStops.length > 0 && renderStops(tripStops, selectedRoute?.sourceName || sourceName || '', selectedRoute?.destName || destinationName || '')}
@@ -354,49 +521,38 @@ export default function TransitMap({
           );
         })}
 
+        {/* Origin / Destination Markers */}
         {sourcePosition && (
-          <Marker position={sourcePosition} icon={createCustomIcon('#097752ff', 16)}>
+          <Marker position={sourcePosition} icon={createCustomIcon('#097752', 14)}>
             <Popup className="transit-popup">
               <div className="font-sans">
-                <div className="text-xs font-medium text-zinc-500 mb-1">
-                  Source
-                </div>
-                <div className="font-semibold text-gray-900">
-                  {sourceName}
-                </div>
+                <div className="text-xs font-medium text-zinc-500 mb-1">Source</div>
+                <div className="font-semibold text-gray-900">{sourceName}</div>
               </div>
             </Popup>
           </Marker>
         )}
 
         {destinationPosition && (
-          <Marker position={destinationPosition} icon={createCustomIcon('#EF4444', 16)}>
+          <Marker position={destinationPosition} icon={createCustomIcon('#DC2626', 14)}>
             <Popup className="transit-popup">
               <div className="font-sans">
-                <div className="text-xs font-medium text-zinc-500 mb-1">
-                  Destination
-                </div>
-                <div className="font-semibold text-gray-900">
-                  {destinationName}
-                </div>
+                <div className="text-xs font-medium text-zinc-500 mb-1">Destination</div>
+                <div className="font-semibold text-gray-900">{destinationName}</div>
               </div>
             </Popup>
           </Marker>
         )}
 
-        {/* Render dynamic transfer station markers */}
+        {/* Transfer Station Markers */}
         {transferPositions && transferPositions.map((pos, idx) => {
           const stopName = transferStopNames[idx] || `Transfer Station ${idx + 1}`;
           return (
-            <Marker key={`dynamic-transfer-${idx}`} position={pos} icon={createCustomIcon('#F59E0B', 18)}>
+            <Marker key={`dynamic-transfer-${idx}`} position={pos} icon={createCustomIcon('#D97706', 16)}>
               <Popup className="transit-popup">
                 <div className="font-sans">
-                  <div className="text-xs font-medium text-zinc-500 mb-1">
-                    Transfer Station {idx + 1}
-                  </div>
-                  <div className="font-semibold text-gray-900">
-                    {stopName}
-                  </div>
+                  <div className="text-xs font-medium text-zinc-500 mb-1">Transfer Station {idx + 1}</div>
+                  <div className="font-semibold text-gray-900">{stopName}</div>
                 </div>
               </Popup>
             </Marker>
@@ -424,12 +580,12 @@ export default function TransitMap({
           <span>Destination</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-[#F97316]" />
+          <div className="w-3 h-3 rounded-full bg-[#EA580C]" />
           <span>{transferPositions && transferPositions.length > 0 ? "Active Segment" : "Your Segment"}</span>
         </div>
         {transferPositions && transferPositions.length > 0 && (
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-[#fb923c]" />
+            <div className="w-3 h-3 rounded-full bg-[#F97316]" />
             <span>Future Segment</span>
           </div>
         )}

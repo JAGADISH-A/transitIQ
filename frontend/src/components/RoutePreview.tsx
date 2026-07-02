@@ -98,7 +98,6 @@ export const RoutePreview: React.FC<RoutePreviewProps> = ({
   }
 
   if (route.transferCount === 2) {
-    console.log("[2_TRANSFER_RENDER]", {
       source: route.sourceName,
       destination: route.destName,
       transferCount: route.transferCount,

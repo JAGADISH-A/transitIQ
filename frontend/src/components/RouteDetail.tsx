@@ -23,10 +23,8 @@ export const RouteDetail: React.FC<RouteDetailProps> = ({
   if (!route) return null;
   const isTransfer = route.isTransfer;
 
-  console.log("ROUTE DETAIL INPUT", route);
 
   if (route.transferCount === 2) {
-    console.log("[2_TRANSFER_RENDER]", {
       source: route.sourceName,
       destination: route.destName,
       transferCount: route.transferCount,

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, X } from 'lucide-react';
 import Header from './components/Header';
 import JourneyPlanner from './components/JourneyPlanner';
 import TransitMap from './components/map/TransitMap';
@@ -271,14 +271,7 @@ function App() {
       }
       setSearchTime(searchTimeString);
 
-      console.log('--- Journey Request Payload ---');
-      console.log(`Source: ${s.stop_name} (${s.stop_id})`);
-      console.log(`Destination: ${d.stop_name} (${d.stop_id})`);
-      console.log(`Time: ${searchTimeString}`);
-      console.log('[JOURNEY_PAYLOAD]', { source_stop_id: s.stop_id, destination_stop_id: d.stop_id, departure_after: searchTimeString, sourceObj: s, destinationObj: d });
-      console.log('-------------------------------');
 
-      console.log('[CALLING_JOURNEY_API]', `${API_BASE}/journey?source_stop_id=${encodeURIComponent(s.stop_id)}&destination_stop_id=${encodeURIComponent(d.stop_id)}&departure_after=${encodeURIComponent(searchTimeString)}`);
       const journeyRes = await fetch(
         `${API_BASE}/journey?source_stop_id=${encodeURIComponent(s.stop_id)}&destination_stop_id=${encodeURIComponent(d.stop_id)}&departure_after=${encodeURIComponent(searchTimeString)}`
       );
@@ -345,25 +338,20 @@ function App() {
         ) : null}
 
         <section className={`flex flex-col lg:flex-row gap-6 min-h-[600px] lg:h-[80vh] ${appView === 'explorer' ? 'hidden' : ''}`}>
-          <div className="w-full lg:w-[30%] flex flex-col gap-4 overflow-y-auto max-h-[80vh] pr-2 custom-scrollbar">
-            {appView === 'roadmap' && selectedRoute ? (
-              <div className="h-full bg-[#0a0a0a] rounded-2xl overflow-hidden border border-white/10 shadow-2xl flex flex-col">
-                <button 
-                  onClick={() => setAppView('planner')}
-                  className="m-4 flex items-center gap-2 text-sm font-medium text-white/60 hover:text-white transition-colors bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl w-fit"
-                >
-                  <ArrowLeft size={16} /> Back to Planner
-                </button>
-                <div className="flex-1 overflow-y-auto custom-scrollbar">
-                  <FullJourneyRoadmap 
-                    route={selectedRoute} 
-                    tripStops={tripStops} 
-                    transferStops={transferStops} 
-                    onStationClick={(lat, lon) => setFocusedLocation([lat, lon])}
-                  />
-                </div>
+          
+          {/* LEFT PANEL */}
+          <div className={`w-full ${appView === 'roadmap' ? 'lg:w-[25%]' : 'lg:w-[30%]'} flex flex-col gap-4 overflow-y-auto max-h-[80vh] pr-2 custom-scrollbar transition-all duration-300`}>
+            {appView === 'planner' && journeyRoutes.length === 0 && transferRoutes.length === 0 && !isLoading ? (
+              <div className="flex flex-col gap-4">
+                <JourneyPlanner 
+                  onSearch={(src, dst, time) => handleSearch(src, dst, time)} 
+                  isLoading={isLoading} 
+                  initialSource={sourceName || ''}
+                  initialDestination={destinationName || ''}
+                  initialTime={searchTime}
+                />
               </div>
-            ) : appView === 'details' || journeyRoutes.length > 0 || transferRoutes.length > 0 || isLoading ? (
+            ) : (
               <div className="flex flex-col gap-4">
                 <button 
                   onClick={handleNewSearch}
@@ -384,21 +372,11 @@ function App() {
                   onOpenAI={() => setIsAIOpen(true)}
                 />
               </div>
-            ) : (
-              <div className="flex flex-col gap-4">
-                <JourneyPlanner 
-                  onSearch={(src, dst, time) => handleSearch(src, dst, time)} 
-                  isLoading={isLoading} 
-
-                  initialSource={sourceName || ''}
-                  initialDestination={destinationName || ''}
-                  initialTime={searchTime}
-                />
-              </div>
             )}
           </div>
 
-          <div className="w-full lg:w-[70%] flex flex-col relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
+          {/* MAP */}
+          <div className="w-full flex-1 flex flex-col relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl transition-all duration-300">
             <TransitMap 
               sourcePosition={sourcePosition}
               destinationPosition={destinationPosition}
@@ -413,6 +391,28 @@ function App() {
               selectedRoute={selectedRoute}
             />
           </div>
+
+          {/* RIGHT PANEL (ROADMAP) */}
+          {appView === 'roadmap' && selectedRoute && (
+            <div className="w-full lg:w-[25%] flex flex-col gap-4 overflow-y-auto max-h-[80vh] pl-2 custom-scrollbar transition-all duration-300">
+              <div className="h-full bg-[#1A1A1A] rounded-2xl overflow-hidden border border-white/10 shadow-2xl flex flex-col">
+                <div className="p-4 border-b border-white/10 flex justify-between items-center bg-[#0F0F0F]">
+                  <h2 className="text-lg font-semibold text-white/90">Journey Roadmap</h2>
+                  <button onClick={() => setAppView('details')} className="p-1 rounded-full text-white/40 hover:text-white hover:bg-white/10 transition-colors">
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#0F0F0F]">
+                  <FullJourneyRoadmap 
+                    route={selectedRoute} 
+                    tripStops={tripStops} 
+                    transferStops={transferStops} 
+                    onStationClick={(lat, lon) => setFocusedLocation([lat, lon])}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </section>
       </main>
 
@@ -424,8 +424,8 @@ function App() {
         onSearch={handleSearch} 
         activeRoute={selectedRoute} 
         onRouteSelect={(r) => { setAppView('details'); handleRouteSelect(r); }}
-        tripStops={tripStops}
-        transferStops={transferStops}
+        tripStops={tripStops || undefined}
+        transferStops={transferStops || undefined}
       />
 
       {/* Global Alert Modal */}

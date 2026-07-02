@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { Clock, CheckCircle2, MapPin, Brain } from 'lucide-react';
+import { Clock, Brain, ChevronDown, ChevronUp } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { NormalizedRoute, TripStop, TransferJourney, JourneyRoute } from '../types/transit';
 import { analyzeTransferRisk } from '../ai/journeyIntelligence';
 
@@ -10,14 +11,189 @@ interface FullJourneyRoadmapProps {
   onStationClick: (lat: number, lon: number) => void;
 }
 
+const StopNode = ({ 
+  stop, 
+  isActive, 
+  isFirstActive, 
+  isLastActive, 
+  onClick 
+}: { 
+  stop: TripStop; 
+  isActive: boolean; 
+  isFirstActive: boolean; 
+  isLastActive: boolean;
+  onClick: () => void;
+}) => {
+  const isEndpoint = isFirstActive || isLastActive;
+  
+  return (
+    <motion.div 
+      className="relative flex items-center gap-4 cursor-pointer group py-1.5"
+      onClick={onClick}
+      whileHover={{ scale: 1.01 }}
+    >
+      {/* Timeline Node */}
+      <div className="relative z-10 w-6 h-6 flex items-center justify-center shrink-0">
+        <motion.div 
+          className={`w-3 h-3 rounded-full transition-colors duration-300 ${
+            isEndpoint ? 'bg-[#FF4500] ring-4 ring-[#FF4500]/20' : 
+            isActive ? 'bg-white border-2 border-[#FF4500]' : 'bg-[#333] border-2 border-[#555]'
+          }`}
+          whileHover={{ scale: 1.2 }}
+        />
+      </div>
+      
+      {/* Content */}
+      <div className="flex-1 flex items-center justify-between">
+        <div className="flex flex-col">
+          <div className="flex items-center gap-2">
+            <h4 className={`text-[15px] transition-colors duration-300 ${
+              isEndpoint ? 'font-bold text-white' : 
+              isActive ? 'font-medium text-white/90 group-hover:text-white' : 'font-normal text-white/40 group-hover:text-white/60'
+            }`}>
+              {stop.stop_name}
+            </h4>
+            {isFirstActive && <span className="text-[10px] uppercase font-bold tracking-wider text-[#FF4500] bg-[#FF4500]/10 px-2 py-0.5 rounded-full">Source</span>}
+            {isLastActive && <span className="text-[10px] uppercase font-bold tracking-wider text-[#FF4500] bg-[#FF4500]/10 px-2 py-0.5 rounded-full">Destination</span>}
+          </div>
+        </div>
+        
+        <div className="text-right">
+          {stop.arrival_time && (
+            <div className={`text-[13px] font-medium transition-colors duration-300 ${isActive ? 'text-white/70' : 'text-white/30'}`}>
+              {stop.arrival_time.substring(0, 5)}
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+const CollapsibleSegment = ({ 
+  stops, 
+  isActive, 
+  label, 
+  onStationClick 
+}: { 
+  stops: TripStop[]; 
+  isActive: boolean; 
+  label: string; 
+  onStationClick: (lat: number, lon: number) => void;
+}) => {
+  const [expanded, setExpanded] = useState(false);
+
+  if (stops.length === 0) return null;
+
+  return (
+    <div className="relative">
+      <button 
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 py-2 pl-[38px] text-[13px] text-white/40 hover:text-white/70 transition-colors"
+      >
+        {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        <span>{expanded ? 'Hide' : `⋯ ${stops.length} stations ${label}`}</span>
+      </button>
+
+      <AnimatePresence>
+        {expanded && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            {stops.map(stop => (
+              <StopNode 
+                key={stop.stop_id} 
+                stop={stop} 
+                isActive={isActive} 
+                isFirstActive={false} 
+                isLastActive={false} 
+                onClick={() => {
+                  if (stop.stop_lat && stop.stop_lon) {
+                    onStationClick(stop.stop_lat, stop.stop_lon);
+                  }
+                }}
+              />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+const RoadmapLeg = ({ 
+  stops, 
+  startName, 
+  endName, 
+  onStationClick,
+}: {  
+  stops: TripStop[]; 
+  startName: string; 
+  endName: string; 
+  onStationClick: (lat: number, lon: number) => void;
+}) => {
+  if (!stops || stops.length === 0) return null;
+
+  const startIndex = Math.max(0, stops.findIndex(s => s.stop_name === startName));
+  let endIndex = stops.findIndex(s => s.stop_name === endName);
+  if (endIndex === -1) endIndex = stops.length - 1;
+
+  const beforeStops = stops.slice(0, startIndex);
+  const activeStops = stops.slice(startIndex, endIndex + 1);
+  const afterStops = stops.slice(endIndex + 1);
+
+  return (
+    <div className="relative">
+      {/* Continuous Track Line */}
+      <div className="absolute left-[11px] top-4 bottom-4 w-[2px] bg-gradient-to-b from-[#333] via-[#FF4500] to-[#333] opacity-50" />
+      
+      <div className="relative z-10 flex flex-col gap-1 py-4">
+        {/* Before Journey */}
+        <CollapsibleSegment 
+          stops={beforeStops} 
+          isActive={false} 
+          label="before" 
+          onStationClick={onStationClick} 
+        />
+
+        {/* Active Journey */}
+        {activeStops.map((stop, i) => (
+          <StopNode 
+            key={stop.stop_id} 
+            stop={stop} 
+            isActive={true} 
+            isFirstActive={i === 0} 
+            isLastActive={i === activeStops.length - 1} 
+            onClick={() => {
+              if (stop.stop_lat && stop.stop_lon) {
+                onStationClick(stop.stop_lat, stop.stop_lon);
+              }
+            }}
+          />
+        ))}
+
+        {/* After Journey */}
+        <CollapsibleSegment 
+          stops={afterStops} 
+          isActive={false} 
+          label="after" 
+          onStationClick={onStationClick} 
+        />
+      </div>
+    </div>
+  );
+};
+
 export default function FullJourneyRoadmap({
   route,
   tripStops,
   transferStops,
   onStationClick
 }: FullJourneyRoadmapProps) {
-  const [expandedStops, setExpandedStops] = useState<Set<string>>(new Set());
-
+  
   const legs = useMemo(() => {
     if (!route?.isTransfer || !route?.originalData) return [];
     const original = route.originalData as TransferJourney;
@@ -46,233 +222,98 @@ export default function FullJourneyRoadmap({
     ].filter(Boolean) as number[];
   }, [route]);
 
-  const toggleStop = (id: string, lat?: number, lon?: number) => {
-    const newSet = new Set(expandedStops);
-    if (newSet.has(id)) {
-      newSet.delete(id);
-    } else {
-      newSet.add(id);
-      if (lat && lon) {
-        onStationClick(lat, lon);
-      }
-    }
-    setExpandedStops(newSet);
-  };
-
-  const renderStop = (stop: TripStop, index: number, total: number, trainName: string, trainNo: string) => {
-    const isFirst = index === 0;
-    const isLast = index === total - 1;
-    const isExpanded = expandedStops.has(stop.stop_id);
-    
-    // Train travel segments are always orange
-    const dotColor = isFirst || isLast 
-      ? 'bg-[#FF4500] border-[#FF4500]/30 shadow-[0_0_10px_rgba(255,69,0,0.5)]' 
-      : 'bg-white border-[#FF4500]';
-    const lineColor = 'bg-[#FF4500]';
-
-    return (
-      <div key={stop.stop_id} className="relative flex items-start gap-4 cursor-pointer group" onClick={() => toggleStop(stop.stop_id, stop.stop_lat, stop.stop_lon)}>
-        {/* Timeline Line */}
-        {!isLast && (
-          <div className={`absolute left-[11px] top-[24px] bottom-[-8px] w-[2px] ${lineColor} opacity-80`} />
-        )}
-        
-        {/* Timeline Dot */}
-        <div className={`relative z-10 w-6 h-6 rounded-full border-[3px] flex items-center justify-center shrink-0 mt-1 transition-all ${dotColor}`}>
-          {(isFirst || isLast) && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-        </div>
-        
-        {/* Content */}
-        <div className="flex-1 pb-6 pt-1">
-          <div className="flex items-start justify-between">
-            <h4 className={`text-[15px] font-bold ${isFirst || isLast ? 'text-white' : 'text-[#ddd]'} group-hover:text-[#FF4500] transition-colors`}>
-              {stop.stop_name}
-            </h4>
-            <div className="text-right">
-              {stop.arrival_time && <div className="text-[13px] font-medium text-[#aaa]">{stop.arrival_time.substring(0, 5)}</div>}
-            </div>
-          </div>
-          
-          {/* Expanded Details */}
-          {isExpanded && (
-            <div className="mt-3 bg-[#111] border border-[#252525] rounded-lg p-3">
-              <div className="grid grid-cols-2 gap-3 mb-2">
-                <div>
-                  <div className="text-[11px] text-[#888] uppercase tracking-wider mb-0.5">Train</div>
-                  <div className="text-[13px] text-white font-medium">{trainName}</div>
-                  <div className="text-[11px] text-[#FF4500]">{trainNo}</div>
-                </div>
-                <div>
-                  <div className="text-[11px] text-[#888] uppercase tracking-wider mb-0.5">Time</div>
-                  <div className="text-[13px] text-white">Arr: {stop.arrival_time?.substring(0,5) || '-'}</div>
-                  <div className="text-[13px] text-white">Dep: {stop.departure_time?.substring(0,5) || '-'}</div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const renderDirectJourney = () => {
-    const r = route.originalData as JourneyRoute;
-    if (!Array.isArray(tripStops) || !tripStops.length) return <div className="text-[#888] p-4 text-[13px]">Loading stops...</div>;
-
-    return (
-      <div className="py-4">
-        {/* START Marker */}
-        <div className="mb-6 bg-[#1a1a1a] rounded-lg p-3 border border-[#333] flex items-center gap-3">
-          <MapPin size={18} className="text-[#FF4500]" />
-          <div>
-            <div className="text-[11px] text-[#888] uppercase tracking-wider">Start Journey</div>
-            <div className="text-[14px] font-bold text-white">{route.sourceName}</div>
-          </div>
-        </div>
-
-        {tripStops.map((stop, i) => renderStop(stop, i, tripStops.length, r.route_name, r.trip_id))}
-
-        {/* DESTINATION Marker */}
-        <div className="mt-2 bg-[#1a2e26] rounded-lg p-3 border border-emerald-500/30 flex items-center gap-3">
-          <CheckCircle2 size={18} className="text-[#10B981]" />
-          <div>
-            <div className="text-[11px] text-emerald-400 uppercase tracking-wider">Destination</div>
-            <div className="text-[14px] font-bold text-white">{route.destName}</div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderTransferJourney = () => {
-    if (!Array.isArray(transferStops)) return <div className="text-[#888] p-4 text-[13px]">Loading stops...</div>;
-
-    return (
-      <div className="py-4">
-        {/* START Marker */}
-        <div className="mb-6 bg-[#1a1a1a] rounded-lg p-3 border border-[#333] flex items-center gap-3">
-          <MapPin size={18} className="text-[#FF4500]" />
-          <div>
-            <div className="text-[11px] text-[#888] uppercase tracking-wider">Start Journey</div>
-            <div className="text-[14px] font-bold text-white">{route.sourceName}</div>
-          </div>
-        </div>
-
-        {/* Iterate over legs dynamically */}
-        {legs.map((leg, index) => {
-          const stops = transferStops?.[index];
-          const hasStops = Array.isArray(stops) && stops.length > 0;
-
-          return (
-            <div key={`leg-wrapper-${index}`}>
-              {/* Leg Stop Sequence */}
-              {hasStops && stops.map((stop, i) => renderStop(stop, i, stops.length, leg.route_name, leg.trip_id))}
-
-              {/* TRANSFER Marker (only if it's not the last leg) */}
-              {index < legs.length - 1 && (
-                <div className="my-6 bg-[#0f1126] rounded-lg p-4 border border-indigo-500/30 flex flex-col gap-2 relative">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center">
-                      <Clock size={16} className="text-indigo-400" />
-                    </div>
-                    <div>
-                      <div className="text-[11px] text-indigo-400 uppercase tracking-wider font-bold mb-0.5">Change Train</div>
-                      <div className="text-[15px] font-bold text-white">
-                        {transferStopNames[index] || `Transfer Station ${index + 1}`}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="ml-11 text-[13px] text-indigo-200">
-                    Wait {Math.round(transferWaitTimes[index] || 0)} minutes before boarding the next train.
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {/* DESTINATION Marker */}
-        <div className="mt-2 bg-[#1a2e26] rounded-lg p-3 border border-emerald-500/30 flex flex-center gap-3 flex-row items-center">
-          <CheckCircle2 size={18} className="text-[#10B981]" />
-          <div>
-            <div className="text-[11px] text-emerald-400 uppercase tracking-wider">Destination</div>
-            <div className="text-[14px] font-bold text-white">{route.destName}</div>
-          </div>
-        </div>
-      </div>
-    );
-  };
   const transferRisk = analyzeTransferRisk(route);
 
   return (
-    <div className="flex h-full w-full bg-[#0a0a0a] text-white overflow-hidden relative">
-      <div className="flex-1 flex flex-col h-full custom-scrollbar overflow-y-auto">
-        <div className="p-5 flex-1">
-          <div className="mb-4">
-            <h2 className="text-[20px] font-black text-white uppercase tracking-tight">Full Journey Roadmap</h2>
-            <p className="text-[13px] text-[#888] mt-1">Interactive timeline of your trip</p>
+    <div className="flex flex-col gap-2 p-2">
+      {/* Roadmap Content */}
+      <div className="bg-[#0F0F0F] rounded-xl overflow-hidden p-4">
+        {!route.isTransfer ? (
+          <RoadmapLeg 
+            stops={tripStops} 
+            startName={route.sourceName} 
+            endName={route.destName} 
+            onStationClick={onStationClick} 
+          />
+        ) : (
+          <div className="flex flex-col">
+            {legs.map((_, index) => {
+              const startName = index === 0 ? route.sourceName : transferStopNames[index - 1];
+              const endName = index === legs.length - 1 ? route.destName : transferStopNames[index];
+              const stops = transferStops?.[index] || [];
+              
+              return (
+                <div key={`leg-${index}`}>
+                  <RoadmapLeg 
+                    stops={stops} 
+                    startName={startName} 
+                    endName={endName} 
+                    onStationClick={onStationClick}
+                  />
+                  
+                  {/* Transfer Node */}
+                  {index < legs.length - 1 && (
+                    <div className="my-4 ml-[11px] pl-[27px] relative border-l-2 border-dashed border-[#FF4500]/50 py-4 flex flex-col gap-2">
+                      <div className="absolute -left-[17px] top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-[#FF4500]/10 flex items-center justify-center border border-[#FF4500]/30 shadow-[0_0_15px_rgba(255,69,0,0.2)]">
+                        <Clock size={14} className="text-[#FF4500]" />
+                      </div>
+                      <div className="text-[11px] text-[#FF4500] uppercase tracking-wider font-bold">Change Train</div>
+                      <div className="text-[15px] font-bold text-white">
+                        {transferStopNames[index] || `Transfer Station ${index + 1}`}
+                      </div>
+                      <div className="text-[13px] text-white/50">
+                        Wait {Math.round(transferWaitTimes[index] || 0)} minutes before boarding.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-          
-          <div className="flex-1">
-            {route.isTransfer ? renderTransferJourney() : renderDirectJourney()}
-          </div>
+        )}
+      </div>
+
+      {/* TransitIQ Thinking */}
+      <div className="bg-[#1A1A1A] rounded-xl p-5 flex flex-col gap-5 border border-white/5">
+        <div className="flex items-center gap-2">
+          <Brain size={18} className="text-[#FF4500]" />
+          <h3 className="text-sm font-bold text-white uppercase tracking-wide">TransitIQ Insights</h3>
         </div>
 
-        {/* TransitIQ Thinking Section (Stacked vertically below the timeline) */}
-        <div className="border-t border-white/5 bg-[#0f0f0f] p-5 flex flex-col gap-6 shrink-0">
-          <div className="flex items-center gap-2">
-            <Brain size={20} className="text-[#FF4500]" />
-            <h3 className="text-sm font-bold text-white uppercase tracking-wide">TransitIQ Thinking</h3>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <h4 className="text-[11px] uppercase tracking-wider text-white/40 font-bold">Why this route?</h4>
+            <div className="text-[13px] text-white/80 leading-relaxed">
+              {route.durationMinutes < 60 ? "Fastest available option." : "Provides the most balanced travel experience."}
+              {route.transferCount === 0 && " Direct connection without transfers."}
+            </div>
           </div>
 
-          <div className="flex flex-col gap-4">
-            {/* Why this route? */}
-            <div className="flex flex-col gap-1.5">
-              <h4 className="text-[11px] uppercase tracking-wider text-zinc-500 font-bold">Why this route?</h4>
-              <div className="text-[13px] text-zinc-300 leading-relaxed">
-                {route.durationMinutes < 60 ? "Fastest available option." : "Provides the most balanced travel experience."}
-                {route.transferCount === 0 && " Direct connection without transfers."}
-              </div>
-            </div>
-
-            {/* Transfer Assessment */}
-            {route.isTransfer && (
-              <div className="flex flex-col gap-1.5">
-                <h4 className="text-[11px] uppercase tracking-wider text-zinc-500 font-bold">Transfer Assessment</h4>
-                <div className="text-[13px] text-zinc-300 leading-relaxed">
+          {route.isTransfer && (
+            <>
+              <div className="flex flex-col gap-1">
+                <h4 className="text-[11px] uppercase tracking-wider text-white/40 font-bold">Transfer Assessment</h4>
+                <div className="text-[13px] text-white/80 leading-relaxed">
                   {transferRisk.message}
                 </div>
               </div>
-            )}
-
-            {/* Connection Risk */}
-            {route.isTransfer && (
-              <div className="flex flex-col gap-1.5">
-                <h4 className="text-[11px] uppercase tracking-wider text-zinc-500 font-bold">Connection Risk</h4>
+              <div className="flex flex-col gap-1">
+                <h4 className="text-[11px] uppercase tracking-wider text-white/40 font-bold">Connection Risk</h4>
                 <div className={`text-[13px] font-medium ${transferRisk.level === 'low' ? 'text-green-400' : transferRisk.level === 'medium' ? 'text-amber-400' : 'text-red-400'}`}>
                   {transferRisk.level.toUpperCase()} - {transferRisk.score}/100
                 </div>
               </div>
-            )}
+            </>
+          )}
 
-            {/* Journey Confidence */}
-            <div className="flex flex-col gap-1.5">
-              <h4 className="text-[11px] uppercase tracking-wider text-zinc-500 font-bold">Journey Confidence</h4>
-              <div className="text-[13px] text-green-400 font-medium">
-                HIGH CONFIDENCE
-              </div>
-            </div>
-
-            {/* Travel Tips */}
-            <div className="flex flex-col gap-1.5">
-              <h4 className="text-[11px] uppercase tracking-wider text-zinc-500 font-bold">Travel Tips</h4>
-              <ul className="list-disc list-inside text-[13px] text-zinc-300 leading-relaxed">
-                {Array.isArray(transferRisk.recommendations) && transferRisk.recommendations.length > 0 
-                  ? transferRisk.recommendations.map((rec, idx) => <li key={idx}>{rec}</li>)
-                  : <li>Arrive 5 minutes early to the platform.</li>
-                }
-              </ul>
-            </div>
+          <div className="flex flex-col gap-1">
+            <h4 className="text-[11px] uppercase tracking-wider text-white/40 font-bold">Travel Tips</h4>
+            <ul className="list-disc list-inside text-[13px] text-white/80 leading-relaxed space-y-1">
+              {Array.isArray(transferRisk.recommendations) && transferRisk.recommendations.length > 0 
+                ? transferRisk.recommendations.map((rec, idx) => <li key={idx}>{rec}</li>)
+                : <li>Arrive 5 minutes early to the platform.</li>
+              }
+            </ul>
           </div>
         </div>
       </div>

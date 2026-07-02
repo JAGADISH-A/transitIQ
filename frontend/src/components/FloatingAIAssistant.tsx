@@ -677,7 +677,6 @@ export default function FloatingAIAssistant({
       if (sessionContext?.route && !isExplicitNewSearch) {
          // Treat as Route Context QA
          try {
-           console.log('[DEBUG-FOUNDRY] Sending to /agent/foundry:', {
              query: text,
              contextKeys: Object.keys(sessionContext),
              hasRoute: !!sessionContext.route,
@@ -689,14 +688,12 @@ export default function FloatingAIAssistant({
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ query: text, context: sessionContext, intent: intent.intent_type })
            });
-           console.log('[DEBUG-FOUNDRY] Response status:', foundryRes.status, foundryRes.statusText);
            if (!foundryRes.ok) {
              const errText = await foundryRes.text();
              console.error('[DEBUG-FOUNDRY] Non-OK response body:', errText);
              throw new Error('Foundry failed: ' + foundryRes.status);
            }
            const foundryData = await foundryRes.json();
-           console.log('[DEBUG-FOUNDRY] Response data:', foundryData);
            addMsg({ role: 'assistant', type: 'text', text: foundryData.answer });
          } catch (e) {
            console.error('[DEBUG-FOUNDRY] Error:', e);

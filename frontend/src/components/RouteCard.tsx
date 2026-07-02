@@ -85,7 +85,6 @@ export const RouteCard: React.FC<RouteCardProps> = ({ route, onClick, isHero = f
   }
 
   if (route.transferCount === 2) {
-    console.log("[2_TRANSFER_RENDER]", {
       source: route.sourceName,
       destination: route.destName,
       transferCount: route.transferCount,

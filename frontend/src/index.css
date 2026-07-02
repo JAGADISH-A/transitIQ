@@ -50,3 +50,34 @@ body {
 .animate-slide-in-left {
   animation: slideInLeft 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+@keyframes drawRoute {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.route-path-animated {
+  stroke-dasharray: var(--path-length);
+  stroke-dashoffset: var(--path-length);
+  animation: drawRoute 2.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes pulseGlow {
+  0% {
+    box-shadow: 0 0 4px #F59E0B, 0 0 8px #F59E0B;
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 10px #F59E0B, 0 0 20px #F59E0B;
+    transform: scale(1.15);
+  }
+  100% {
+    box-shadow: 0 0 4px #F59E0B, 0 0 8px #F59E0B;
+    transform: scale(1);
+  }
+}
+
+.moving-train-icon div {
+  animation: pulseGlow 2s infinite ease-in-out;
+}
